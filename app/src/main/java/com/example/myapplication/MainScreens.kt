@@ -86,7 +86,7 @@ private val demoPosts = listOf(
 internal fun DiscoverScreen(
     backdrop: LayerBackdrop,
     userPosts: List<LostFoundPost>,
-    onStartPublish: (String) -> Unit
+    onStartPublish: () -> Unit
 ) {
     // Search terms can contain card identifiers, so keep them out of saved state.
     var searchQuery by remember { mutableStateOf("") }
@@ -110,7 +110,6 @@ internal fun DiscoverScreen(
     PageShell(backdrop) {
         PageHeader(
             eyebrow = "SCU · FIND MY CARD",
-            title = "发现",
             subtitle = "让遗失的校园卡，重新找到主人。"
         )
 
@@ -128,18 +127,7 @@ internal fun DiscoverScreen(
                 }
                 Text("${filteredPosts.size} 条", fontSize = 12.sp, color = ScreenMuted)
             }
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf("全部", "寻卡", "拾卡").forEach { filter ->
-                    SelectChip(
-                        text = filter,
-                        selected = selectedFilter == filter,
-                        onClick = { selectedFilter = filter }
-                    )
-                }
-            }
+
             Row(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -157,9 +145,9 @@ internal fun DiscoverScreen(
         if (filteredPosts.isEmpty()) {
             EmptyCard(
                 title = "没有找到相关信息",
-                subtitle = "试试更短的关键词，或发布一条寻卡信息。",
-                action = "发布信息",
-                onClick = { onStartPublish("") }
+                subtitle = "试试更短的关键词，或登记你捡到的卡片。",
+                action = "登记拾获信息",
+                onClick = onStartPublish
             )
         } else {
             filteredPosts.forEach { post ->
@@ -197,126 +185,67 @@ internal fun DiscoverScreen(
 @Composable
 internal fun PublishScreen(
     backdrop: LayerBackdrop,
-    selectedType: String,
-    onTypeSelected: (String) -> Unit,
     onSubmit: (LostFoundPost) -> Unit
 ) {
+    // Full card identifiers stay in transient UI state and are never stored in the post.
+    var cardInfo by remember { mutableStateOf("") }
+    var campus by rememberSaveable { mutableStateOf("") }
+    var location by rememberSaveable { mutableStateOf("") }
+    var foundDate by rememberSaveable { mutableStateOf("今天") }
+    var custodyStatus by rememberSaveable { mutableStateOf("由我暂时保管") }
+    var error by rememberSaveable { mutableStateOf("") }
+
     PageShell(backdrop) {
-        if (selectedType.isBlank()) {
-            PageHeader(
-                eyebrow = "PUBLISH",
-                title = "发布信息",
-                subtitle = "选择你遇到的情况，快速登记。"
-            )
-            PublishOptionCard(
-                symbol = "⌕",
-                tint = BrandBlue,
-                title = "我丢失了校园卡",
-                subtitle = "填写遗失校区和地点，让大家帮你留意。",
-                buttonLabel = "发布寻卡信息",
-                onClick = { onTypeSelected("寻卡") }
-            )
-            PublishOptionCard(
-                symbol = "✓",
-                tint = SuccessGreen,
-                title = "我捡到了校园卡",
-                subtitle = "登记拾获信息，帮助校园卡尽快回到主人手中。",
-                buttonLabel = "发布拾卡信息",
-                onClick = { onTypeSelected("拾卡") }
-            )
-            NoticeCard(
-                title = "保护个人信息",
-                body = "请勿在公开信息中填写完整校园卡号、身份证号或其他敏感信息。"
-            )
-        } else {
-            PublishForm(
-                type = selectedType,
-                onBack = { onTypeSelected("") },
-                onSubmit = onSubmit
-            )
-        }
-    }
-}
-
-@Composable
-private fun PublishForm(
-    type: String,
-    onBack: () -> Unit,
-    onSubmit: (LostFoundPost) -> Unit
-) {
-    // Keep potentially sensitive card details only in transient UI state.
-    var cardInfo by remember(type) { mutableStateOf("") }
-    var campus by rememberSaveable(type) { mutableStateOf("") }
-    var location by rememberSaveable(type) { mutableStateOf("") }
-    var date by rememberSaveable(type) { mutableStateOf("") }
-    var note by remember(type) { mutableStateOf("") }
-    var error by rememberSaveable(type) { mutableStateOf("") }
-    val isLost = type == "寻卡"
-
-    Text(
-        text = "‹ 返回发布类型",
-        color = BrandBlue,
-        fontSize = 14.sp,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier.clickable(onClick = onBack).padding(vertical = 4.dp)
-    )
-    PageHeader(
-        eyebrow = if (isLost) "LOOKING FOR A CARD" else "FOUND A CARD",
-        title = if (isLost) "发布寻卡信息" else "发布拾卡信息",
-        subtitle = if (isLost) "留下必要线索，方便大家帮你寻找。" else "登记拾获地点，帮助失主确认。"
-    )
-
-    FormTextField(
-        label = "校园卡尾号或外观特征",
-        value = cardInfo,
-        onValueChange = { cardInfo = it; error = "" },
-        placeholder = "例如：尾号 3821 / 蓝色卡套；不要填写完整卡号"
-    )
-    Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-        Text(if (isLost) "遗失校区" else "拾获校区", fontSize = 13.sp, color = ScreenInk, fontWeight = FontWeight.SemiBold)
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            listOf("江安校区", "望江校区", "华西校区", "华西第二校区").forEach { campusName ->
-                SelectChip(campusName, selected = campus == campusName) {
-                    campus = campusName
-                    error = ""
+        Text("登记拾获信息", fontSize = 24.sp, lineHeight = 29.sp, fontWeight = FontWeight.Bold, color = ScreenInk)
+        FormTextField(
+            label = "校园卡尾号或外观特征",
+            value = cardInfo,
+            onValueChange = { cardInfo = it; error = "" },
+            placeholder = "例如：尾号 3821 / 蓝色卡套；不要填写完整卡号"
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text("拾获校区", fontSize = 13.sp, color = ScreenInk, fontWeight = FontWeight.SemiBold)
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("江安校区", "望江校区", "华西校区", "华西第二校区").forEach { campusName ->
+                    SelectChip(campusName, selected = campus == campusName) {
+                        campus = campusName
+                        error = ""
+                    }
                 }
             }
         }
-    }
-    FormTextField(
-        label = if (isLost) "遗失地点" else "拾获地点",
-        value = location,
-        onValueChange = { location = it; error = "" },
-        placeholder = "例如：第一教学楼附近"
-    )
-    FormTextField(
-        label = if (isLost) "遗失日期" else "拾获日期",
-        value = date,
-        onValueChange = { date = it; error = "" },
-        placeholder = "例如：10月29日"
-    )
-    FormTextField(
-        label = "补充说明（选填）",
-        value = note,
-        onValueChange = { note = it },
-        placeholder = "填写有助于辨认的信息",
-        maxLines = 4
-    )
-    NoticeCard(
-        title = "隐私提示",
-        body = "公开列表只会展示脱敏后的识别信息。请勿填写身份证号、完整校园卡号或住址。"
-    )
-    if (error.isNotBlank()) {
-        Text(error, color = Color(0xFFB5473C), fontSize = 13.sp)
-    }
-    PrimaryActionButton(
-        text = if (isLost) "提交寻卡信息" else "提交拾卡信息",
-        onClick = {
-            if (cardInfo.isBlank() || campus.isBlank() || location.isBlank() || date.isBlank()) {
-                error = "请补全识别信息、校区、地点和日期。"
+        FormTextField(
+            label = "拾获地点",
+            value = location,
+            onValueChange = { location = it; error = "" },
+            placeholder = "例如：第一教学楼附近"
+        )
+        FormTextField(
+            label = "拾获日期",
+            value = foundDate,
+            onValueChange = { foundDate = it; error = "" },
+            placeholder = "例如：今天"
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text("卡片当前状态", fontSize = 13.sp, color = ScreenInk, fontWeight = FontWeight.SemiBold)
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf("由我暂时保管", "已交至招领处", "已归还失主").forEach { status ->
+                    SelectChip(status, selected = custodyStatus == status) { custodyStatus = status }
+                }
+            }
+        }
+        if (error.isNotBlank()) {
+            Text(error, color = Color(0xFFB5473C), fontSize = 13.sp)
+        }
+        PrimaryActionButton("发布拾卡信息") {
+            if (cardInfo.isBlank() || campus.isBlank() || location.isBlank() || foundDate.isBlank()) {
+                error = "请填写卡片特征、校区、地点和日期。"
             } else {
                 val digits = cardInfo.filter { it.isDigit() }
                 val safeTitle = when {
@@ -324,35 +253,38 @@ private fun PublishForm(
                     digits.isEmpty() -> "校园卡 · ${cardInfo.trim().take(16)}"
                     else -> "校园卡 · 卡号已隐藏"
                 }
-                val safeNote = note.replace(Regex("\\d{6,}"), "已隐藏号码")
+                val safeStatusNote = when (custodyStatus) {
+                    "已交至招领处" -> "卡片已交至失物招领处。"
+                    "已归还失主" -> "卡片已归还失主。"
+                    else -> "卡片目前由拾获者暂时保管。"
+                }
                 onSubmit(
                     LostFoundPost(
-                        type = type,
-                        status = if (isLost) "寻找中" else "待认领",
+                        type = "拾卡",
+                        status = custodyStatus,
                         title = safeTitle,
                         campus = campus,
                         location = location,
-                        date = date,
-                        note = safeNote.ifBlank { if (isLost) "正在寻找遗失的校园卡。" else "已登记拾获信息，请核对卡片特征。" },
+                        date = foundDate,
+                        note = safeStatusNote,
                         isDemo = false
                     )
                 )
             }
         }
-    )
+    }
 }
 
 @Composable
 internal fun ProfileScreen(backdrop: LayerBackdrop, userPosts: List<LostFoundPost>) {
     var dialogTarget by remember { mutableStateOf<String?>(null) }
-    val openPosts = userPosts.filter { it.status != "已归还" && it.status != "已解决" }
+    val openPosts = userPosts.filter { it.status !in setOf("已归还", "已归还失主", "已解决") }
     val completedPosts = userPosts.size - openPosts.size
 
     PageShell(backdrop) {
         PageHeader(
             eyebrow = "MY CAMPUS",
-            title = "我的",
-            subtitle = "个人信息与寻卡记录"
+            subtitle = "个人信息与拾卡记录"
         )
         ProfileCard(onClick = { dialogTarget = "个人资料" })
 
@@ -366,14 +298,6 @@ internal fun ProfileScreen(backdrop: LayerBackdrop, userPosts: List<LostFoundPos
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("我的记录", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = ScreenInk)
-            RecordRow(
-                symbol = "⌕",
-                title = "我的寻卡",
-                subtitle = "查看我发布的遗失信息",
-                count = userPosts.count { it.type == "寻卡" },
-                tint = BrandBlue,
-                onClick = { dialogTarget = "我的寻卡" }
-            )
             RecordRow(
                 symbol = "✓",
                 title = "我的拾卡",
@@ -402,7 +326,6 @@ internal fun ProfileScreen(backdrop: LayerBackdrop, userPosts: List<LostFoundPos
 
     dialogTarget?.let { target ->
         val matchingPosts = when (target) {
-            "我的寻卡" -> userPosts.filter { it.type == "寻卡" }
             "我的拾卡" -> userPosts.filter { it.type == "拾卡" }
             else -> emptyList()
         }
@@ -422,7 +345,7 @@ internal fun ProfileScreen(backdrop: LayerBackdrop, userPosts: List<LostFoundPos
                     Text(
                         text = when {
                             target == "我的认领" -> "目前还没有认领记录。后续可从匹配信息的详情页发起认领。"
-                            isRecordDialog -> "目前还没有相关记录。发布寻卡或拾卡信息后，会显示在这里。"
+                            isRecordDialog -> "目前还没有拾卡记录。发布拾卡信息后，会显示在这里。"
                             target == "隐私与安全" -> "发布信息会隐藏完整校园卡号。请勿公开填写身份证号或其他敏感资料。"
                             target == "关于川大寻卡" -> "川大寻卡帮助校园卡失主与拾获者更快建立联系。当前界面为本地交互原型。"
                             else -> "个人资料编辑入口已预留。"
@@ -468,10 +391,9 @@ private fun WhitePageBackground(modifier: Modifier) {
 }
 
 @Composable
-private fun PageHeader(eyebrow: String, title: String, subtitle: String) {
+private fun PageHeader(eyebrow: String, subtitle: String) {
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Text(eyebrow, color = BrandBlue, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
-        Text(title, color = ScreenInk, fontSize = 28.sp, lineHeight = 33.sp, fontWeight = FontWeight.Bold)
         Text(subtitle, color = ScreenMuted, fontSize = 14.sp, lineHeight = 20.sp)
     }
 }
@@ -623,19 +545,6 @@ private fun SelectChip(text: String, selected: Boolean, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 9.dp)
     )
-}
-
-@Composable
-private fun NoticeCard(title: String, body: String) {
-    InfoCard(modifier = Modifier.fillMaxWidth()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
-            Text("i", color = BrandBlue, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Text(body, color = ScreenMuted, fontSize = 12.sp, lineHeight = 18.sp)
-            }
-        }
-    }
 }
 
 @Composable

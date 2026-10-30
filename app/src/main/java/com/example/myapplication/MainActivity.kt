@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,7 +60,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun MainScreen() {
     var selected by remember { mutableStateOf("发现") }
-    var publishType by rememberSaveable { mutableStateOf("") }
     var userPosts by remember { mutableStateOf(emptyList<LostFoundPost>()) }
     val pageStateHolder = rememberSaveableStateHolder()
     val backdrop = rememberLayerBackdrop()
@@ -71,18 +69,12 @@ private fun MainScreen() {
                 "发现" -> DiscoverScreen(
                     backdrop = backdrop,
                     userPosts = userPosts,
-                    onStartPublish = { type ->
-                        publishType = type
-                        selected = "发布"
-                    }
+                    onStartPublish = { selected = "发布" }
                 )
                 "发布" -> PublishScreen(
                     backdrop = backdrop,
-                    selectedType = publishType,
-                    onTypeSelected = { publishType = it },
                     onSubmit = { post ->
                         userPosts = listOf(post) + userPosts
-                        publishType = ""
                         selected = "发现"
                     }
                 )
@@ -93,7 +85,7 @@ private fun MainScreen() {
             backdrop,
             selected,
             onSelect = { selected = it },
-            onCreate = { publishType = ""; selected = "发布" },
+            onCreate = { selected = "发布" },
             modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 38.dp)
         )
     }
