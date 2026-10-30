@@ -11,14 +11,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
-import java.net.HttpURLConnection
-import java.net.URL
 
 /** Local-only OCR for printed text on a found campus card. */
 internal object CardOcr {
     private const val language = "chi_sim"
-    private const val modelUrl =
-        "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main/chi_sim.traineddata"
     private const val minimumModelBytes = 1_000_000L
     private const val maxImageDimension = 2400
 
@@ -27,7 +23,7 @@ internal object CardOcr {
         val tessdataDirectory = File(dataDirectory, "tessdata")
         val model = File(tessdataDirectory, "$language.traineddata")
         if (!model.exists() || model.length() < minimumModelBytes) {
-            downloadModel(model)
+            installBundledModel(context, model)
         }
 
         val bitmap = decodeBitmap(context, imageUri)
@@ -45,35 +41,26 @@ internal object CardOcr {
         }
     }
 
-    private fun downloadModel(destination: File) {
+    private fun installBundledModel(context: Context, destination: File) {
         val parentDirectory = requireNotNull(destination.parentFile)
         parentDirectory.mkdirs()
         val temporary = File(parentDirectory, "${destination.name}.download")
-        val connection = URL(modelUrl).openConnection() as HttpURLConnection
         try {
-            connection.connectTimeout = 15_000
-            connection.readTimeout = 45_000
-            connection.instanceFollowRedirects = true
-            connection.connect()
-            if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                throw IllegalStateException("中文识别模型下载失败（HTTP ${connection.responseCode}）。")
-            }
-            connection.inputStream.use { input ->
+            context.assets.open("tessdata/$language.traineddata").use { input ->
                 FileOutputStream(temporary).use { output ->
                     input.copyTo(output)
                 }
             }
             if (temporary.length() < minimumModelBytes) {
-                throw IllegalStateException("下载的中文识别模型不完整，请重试。")
+                throw IllegalStateException("安装包中的中文识别模型不完整。")
             }
             if (destination.exists() && !destination.delete()) {
                 throw IllegalStateException("无法更新中文识别模型。")
             }
             if (!temporary.renameTo(destination)) {
-                throw IllegalStateException("无法保存中文识别模型。")
+                throw IllegalStateException("无法准备中文识别模型。")
             }
         } finally {
-            connection.disconnect()
             temporary.delete()
         }
     }

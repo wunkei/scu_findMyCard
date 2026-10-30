@@ -226,7 +226,7 @@ internal fun PublishScreen(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                ocrMessage = "识别失败。首次使用需联网下载模型，请检查网络后重试。"
+                ocrMessage = "识别失败，请重试或手动填写卡片特征。"
             } finally {
                 temporaryFile?.delete()
                 isRecognizing = false
@@ -303,7 +303,7 @@ internal fun PublishScreen(
             }
         }
         Text(
-            "首次使用需联网下载约 2.4 MB 中文模型；图片仅在本机识别，只填入卡号尾号。",
+            "中文识别模型已随安装包准备好；图片仅在本机识别，只填入卡号尾号。",
             color = ScreenMuted,
             fontSize = 11.sp,
             lineHeight = 16.sp
