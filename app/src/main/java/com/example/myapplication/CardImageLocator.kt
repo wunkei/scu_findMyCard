@@ -12,14 +12,15 @@ import org.opencv.imgproc.Imgproc
 import kotlin.math.hypot
 import kotlin.math.max
 
-/** Finds the largest card-shaped quadrilateral and corrects its perspective. */
+/** Finds and rectifies a card; falls back to the scanner's centered frame crop when edges are weak. */
 internal object CardImageLocator {
     private const val maxWorkingDimension = 1800
-    private const val minCardAreaRatio = 0.035
-    private const val minCardAspectRatio = 1.28
-    private const val maxCardAspectRatio = 2.05
-    private const val rectifiedWidth = 1280
-    private const val rectifiedHeight = 807
+    private const val minCardAreaRatio = 0.012
+    private const val minCardAspectRatio = 1.0
+    private const val maxCardAspectRatio = 2.2
+    private const val scannerFrameAspectRatio = 1.586
+    private const val rectifiedWidth = 1920
+    private const val rectifiedHeight = 1210
 
     fun locateAndRectify(bitmap: Bitmap): Bitmap {
         check(OpenCVLoader.initLocal()) { "OpenCV 初始化失败，无法定位卡片。" }
@@ -40,9 +41,10 @@ internal object CardImageLocator {
         val gray = Mat()
         val blurred = Mat()
         val edges = Mat()
+        val closedEdges = Mat()
+        val thresholded = Mat()
         val hierarchy = Mat()
-        val contours = arrayListOf<MatOfPoint>()
-        var contourInput: Mat? = null
+        val morphologyKernel = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, Size(7.0, 7.0))
         var sourcePoints: MatOfPoint2f? = null
         var targetPoints: MatOfPoint2f? = null
         var transform: Mat? = null
@@ -52,27 +54,21 @@ internal object CardImageLocator {
             Utils.bitmapToMat(workingBitmap, rgba)
             Imgproc.cvtColor(rgba, gray, Imgproc.COLOR_RGBA2GRAY)
             Imgproc.GaussianBlur(gray, blurred, Size(5.0, 5.0), 0.0)
-            Imgproc.Canny(blurred, edges, 48.0, 144.0)
-            contourInput = edges.clone()
-            Imgproc.findContours(
-                contourInput,
-                contours,
+            val cardQuad = findCardQuad(
+                blurred,
+                workingBitmap.width,
+                workingBitmap.height,
+                edges,
+                closedEdges,
+                thresholded,
                 hierarchy,
-                Imgproc.RETR_LIST,
-                Imgproc.CHAIN_APPROX_SIMPLE
+                morphologyKernel
             )
+            if (cardQuad == null) {
+                return centerFrameCrop(workingBitmap)
+            }
 
-            val imageArea = workingBitmap.width.toDouble() * workingBitmap.height
-            val cardCorners = contours
-                .asSequence()
-                .mapNotNull { contour ->
-                    findCardQuad(contour, imageArea, workingBitmap.width, workingBitmap.height)
-                }
-                .maxByOrNull { it.area }
-                ?.corners
-                ?: throw IllegalStateException("没有找到完整卡片，请让卡片四角都进入取景框后重试。")
-
-            sourcePoints = MatOfPoint2f(*cardCorners)
+            sourcePoints = MatOfPoint2f(*cardQuad.corners)
             targetPoints = MatOfPoint2f(
                 Point(0.0, 0.0),
                 Point((rectifiedWidth - 1).toDouble(), 0.0),
@@ -96,9 +92,10 @@ internal object CardImageLocator {
             gray.release()
             blurred.release()
             edges.release()
+            closedEdges.release()
+            thresholded.release()
             hierarchy.release()
-            contourInput?.release()
-            contours.forEach { it.release() }
+            morphologyKernel.release()
             sourcePoints?.release()
             targetPoints?.release()
             transform?.release()
@@ -106,53 +103,136 @@ internal object CardImageLocator {
         }
     }
 
-    private data class CardQuad(val corners: Array<Point>, val area: Double)
+    private data class CardQuad(val corners: Array<Point>, val score: Double)
 
     private fun findCardQuad(
+        gray: Mat,
+        imageWidth: Int,
+        imageHeight: Int,
+        edges: Mat,
+        closedEdges: Mat,
+        thresholded: Mat,
+        hierarchy: Mat,
+        morphologyKernel: Mat
+    ): CardQuad? {
+        val bestCandidates = mutableListOf<CardQuad>()
+        val edgeThresholds = listOf(24.0 to 72.0, 40.0 to 120.0, 64.0 to 192.0)
+        edgeThresholds.forEach { (low, high) ->
+            Imgproc.Canny(gray, edges, low, high)
+            Imgproc.morphologyEx(edges, closedEdges, Imgproc.MORPH_CLOSE, morphologyKernel)
+            collectCandidates(closedEdges, imageWidth, imageHeight, hierarchy, bestCandidates)
+        }
+
+        listOf(Imgproc.THRESH_BINARY, Imgproc.THRESH_BINARY_INV).forEach { thresholdMode ->
+            Imgproc.adaptiveThreshold(
+                gray,
+                thresholded,
+                255.0,
+                Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C,
+                thresholdMode,
+                31,
+                7.0
+            )
+            Imgproc.morphologyEx(thresholded, closedEdges, Imgproc.MORPH_CLOSE, morphologyKernel)
+            collectCandidates(closedEdges, imageWidth, imageHeight, hierarchy, bestCandidates)
+        }
+
+        return bestCandidates.maxByOrNull(CardQuad::score)
+    }
+
+    private fun collectCandidates(
+        mask: Mat,
+        imageWidth: Int,
+        imageHeight: Int,
+        hierarchy: Mat,
+        results: MutableList<CardQuad>
+    ) {
+        val input = mask.clone()
+        val contours = arrayListOf<MatOfPoint>()
+        try {
+            Imgproc.findContours(input, contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE)
+            val imageArea = imageWidth.toDouble() * imageHeight
+            contours.forEach { contour ->
+                findCardQuads(contour, imageArea, imageWidth, imageHeight).forEach(results::add)
+            }
+        } finally {
+            input.release()
+            contours.forEach { it.release() }
+        }
+    }
+
+    private fun findCardQuads(
         contour: MatOfPoint,
         imageArea: Double,
         imageWidth: Int,
         imageHeight: Int
-    ): CardQuad? {
+    ): List<CardQuad> {
         val contourArea = Imgproc.contourArea(contour)
-        if (contourArea < imageArea * minCardAreaRatio) return null
+        if (contourArea < imageArea * minCardAreaRatio || contourArea > imageArea * 0.96) return emptyList()
 
         val contourPoints = MatOfPoint2f(*contour.toArray())
         val approximate = MatOfPoint2f()
         try {
             val perimeter = Imgproc.arcLength(contourPoints, true)
-            Imgproc.approxPolyDP(contourPoints, approximate, perimeter * 0.018, true)
-            val points = approximate.toArray()
-            if (points.size != 4) return null
+            if (perimeter <= 0.0) return emptyList()
+            val candidates = mutableListOf<CardQuad>()
+            listOf(0.012, 0.018, 0.026, 0.038, 0.052).forEach { epsilonRatio ->
+                Imgproc.approxPolyDP(contourPoints, approximate, perimeter * epsilonRatio, true)
+                val points = approximate.toArray()
+                if (points.size != 4) return@forEach
 
-            val polygon = MatOfPoint(*points)
-            val isConvex = try {
-                Imgproc.isContourConvex(polygon)
-            } finally {
-                polygon.release()
-            }
-            if (!isConvex) return null
-
-            val ordered = orderCorners(points) ?: return null
-            val horizontalMargin = imageWidth * 0.015
-            val verticalMargin = imageHeight * 0.015
-            if (ordered.any {
-                    it.x <= horizontalMargin || it.x >= imageWidth - horizontalMargin ||
-                        it.y <= verticalMargin || it.y >= imageHeight - verticalMargin
+                val polygon = MatOfPoint(*points)
+                val isConvex = try {
+                    Imgproc.isContourConvex(polygon)
+                } finally {
+                    polygon.release()
                 }
-            ) return null
+                if (!isConvex) return@forEach
 
-            val top = distance(ordered[0], ordered[1])
-            val bottom = distance(ordered[3], ordered[2])
-            val left = distance(ordered[0], ordered[3])
-            val right = distance(ordered[1], ordered[2])
-            val aspectRatio = max(top, bottom) / max(left, right).coerceAtLeast(1.0)
-            if (aspectRatio !in minCardAspectRatio..maxCardAspectRatio) return null
+                val ordered = orderCorners(points) ?: return@forEach
+                val minX = ordered.minOf { it.x }
+                val maxX = ordered.maxOf { it.x }
+                val minY = ordered.minOf { it.y }
+                val maxY = ordered.maxOf { it.y }
+                if ((maxX - minX) >= imageWidth * 0.98 && (maxY - minY) >= imageHeight * 0.98) {
+                    return@forEach
+                }
 
-            return CardQuad(ordered, contourArea)
+                val top = distance(ordered[0], ordered[1])
+                val bottom = distance(ordered[3], ordered[2])
+                val left = distance(ordered[0], ordered[3])
+                val right = distance(ordered[1], ordered[2])
+                val aspectRatio = max(top, bottom) / max(left, right).coerceAtLeast(1.0)
+                if (aspectRatio !in minCardAspectRatio..maxCardAspectRatio) return@forEach
+
+                val centerX = (minX + maxX) / 2.0
+                val centerY = (minY + maxY) / 2.0
+                val offsetX = (centerX - imageWidth / 2.0) / imageWidth
+                val offsetY = (centerY - imageHeight / 2.0) / imageHeight
+                val centerPenalty = 1.0 + 5.0 * (offsetX * offsetX + offsetY * offsetY)
+                candidates += CardQuad(ordered, contourArea / centerPenalty)
+            }
+            return candidates
         } finally {
             contourPoints.release()
             approximate.release()
+        }
+    }
+
+    private fun centerFrameCrop(bitmap: Bitmap): Bitmap {
+        val cropWidth = minOf(
+            bitmap.width * 0.86,
+            bitmap.height * 0.86 * scannerFrameAspectRatio
+        ).toInt().coerceAtLeast(1)
+        val cropHeight = (cropWidth / scannerFrameAspectRatio).toInt().coerceAtLeast(1)
+            .coerceAtMost(bitmap.height)
+        val cropLeft = ((bitmap.width - cropWidth) / 2).coerceAtLeast(0)
+        val cropTop = ((bitmap.height - cropHeight) / 2).coerceAtLeast(0)
+        val crop = Bitmap.createBitmap(bitmap, cropLeft, cropTop, cropWidth, cropHeight)
+        return try {
+            Bitmap.createScaledBitmap(crop, rectifiedWidth, rectifiedHeight, true)
+        } finally {
+            if (crop !== bitmap) crop.recycle()
         }
     }
 

@@ -232,7 +232,7 @@ internal fun PublishScreen(
                     RecognizedCardType.OTHER -> {
                         cardInfo = ""
                         ocrMessage = if (result.lines.isEmpty()) {
-                            "已尝试定位卡片，但没有识别到文字；请重新拍摄或手动填写。"
+                            "没有识别到文字。请让卡片正面朝上、文字清晰并完整进入取景框，避免反光后重拍。"
                         } else {
                             "已识别到卡面文字，但类型不明确；请手动确认这是校园卡后填写。"
                         }

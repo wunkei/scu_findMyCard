@@ -84,36 +84,73 @@ internal object CardOcr {
             if (!api.init(dataDirectory.absolutePath, language)) {
                 throw IllegalStateException("中文识别模型初始化失败。")
             }
-            api.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO)
-            api.setImage(bitmap)
+            api.setVariable("user_defined_dpi", "300")
 
-            val iterator: ResultIterator = api.getResultIterator()
-                ?: return emptyList()
-            try {
-                val results = mutableListOf<CardTextLine>()
-                iterator.begin()
-                do {
-                    val text = iterator.getUTF8Text(PageIteratorLevel.RIL_TEXTLINE)
-                        ?.trim()
-                        .orEmpty()
-                    val bounds = iterator.getBoundingRect(PageIteratorLevel.RIL_TEXTLINE)
-                    if (text.isNotBlank() && bounds.width() > 0 && bounds.height() > 0) {
-                        results += CardTextLine(
-                            text = text,
-                            left = bounds.left.toFloat() / bitmap.width,
-                            top = bounds.top.toFloat() / bitmap.height,
-                            right = bounds.right.toFloat() / bitmap.width,
-                            bottom = bounds.bottom.toFloat() / bitmap.height,
-                            confidence = iterator.confidence(PageIteratorLevel.RIL_TEXTLINE) / 100f
-                        )
-                    }
-                } while (iterator.next(PageIteratorLevel.RIL_TEXTLINE))
-                return results
-            } finally {
-                iterator.delete()
+            val pageModes = listOf(
+                TessBaseAPI.PageSegMode.PSM_SPARSE_TEXT,
+                TessBaseAPI.PageSegMode.PSM_AUTO,
+                TessBaseAPI.PageSegMode.PSM_SINGLE_BLOCK
+            )
+            for (pageMode in pageModes) {
+                api.setPageSegMode(pageMode)
+                api.setImage(bitmap)
+
+                // getUTF8Text() triggers recognition; only then request the positioned iterator.
+                val recognizedText = api.getUTF8Text().orEmpty()
+                val positionedLines = readPositionedLines(api, bitmap)
+                if (positionedLines.isNotEmpty()) return positionedLines
+
+                val plainTextLines = fallbackTextLines(recognizedText)
+                if (plainTextLines.isNotEmpty()) return plainTextLines
             }
+            return emptyList()
         } finally {
             api.recycle()
+        }
+    }
+
+    private fun readPositionedLines(api: TessBaseAPI, bitmap: Bitmap): List<CardTextLine> {
+        val iterator: ResultIterator = api.getResultIterator() ?: return emptyList()
+        try {
+            val results = mutableListOf<CardTextLine>()
+            iterator.begin()
+            do {
+                val text = iterator.getUTF8Text(PageIteratorLevel.RIL_TEXTLINE)
+                    ?.trim()
+                    .orEmpty()
+                val bounds = iterator.getBoundingRect(PageIteratorLevel.RIL_TEXTLINE)
+                if (text.isNotBlank() && bounds.width() > 0 && bounds.height() > 0) {
+                    results += CardTextLine(
+                        text = text,
+                        left = bounds.left.toFloat() / bitmap.width,
+                        top = bounds.top.toFloat() / bitmap.height,
+                        right = bounds.right.toFloat() / bitmap.width,
+                        bottom = bounds.bottom.toFloat() / bitmap.height,
+                        confidence = (iterator.confidence(PageIteratorLevel.RIL_TEXTLINE) / 100f)
+                            .coerceIn(0f, 1f)
+                    )
+                }
+            } while (iterator.next(PageIteratorLevel.RIL_TEXTLINE))
+            return results
+        } finally {
+            iterator.delete()
+        }
+    }
+
+    private fun fallbackTextLines(text: String): List<CardTextLine> {
+        val recognizedLines = text.lineSequence().map(String::trim).filter(String::isNotEmpty).toList()
+        if (recognizedLines.isEmpty()) return emptyList()
+        val lineHeight = 0.86f / recognizedLines.size
+        return recognizedLines.mapIndexed { index, line ->
+            val top = 0.06f + index * lineHeight
+            CardTextLine(
+                text = line,
+                left = 0.03f,
+                top = top,
+                right = 0.97f,
+                bottom = (top + lineHeight * 0.72f).coerceAtMost(0.98f),
+                confidence = 0.35f
+            )
         }
     }
 
