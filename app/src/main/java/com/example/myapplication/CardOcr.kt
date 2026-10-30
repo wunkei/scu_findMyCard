@@ -7,18 +7,47 @@ import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
 import com.googlecode.tesseract.android.TessBaseAPI
+import com.googlecode.tesseract.android.TessBaseAPI.PageIteratorLevel
+import com.googlecode.tesseract.android.ResultIterator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import java.util.Locale
 
-/** Local-only OCR for printed text on a found campus card. */
+internal enum class RecognizedCardType(val title: String) {
+    CAMPUS_CARD("校园卡"),
+    IDENTITY_CARD("居民身份证"),
+    HOME_RETURN_PERMIT("港澳居民来往内地通行证"),
+    OTHER("暂无法判断")
+}
+
+internal data class CardTextLine(
+    val text: String,
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+    val confidence: Float
+) {
+    val centerY: Float get() = (top + bottom) / 2f
+}
+
+internal data class CardScanResult(
+    val type: RecognizedCardType,
+    val typeConfidence: Float,
+    val matchedKeyword: String?,
+    val lines: List<CardTextLine>,
+    val cardNumberSuffix: String?
+)
+
+/** Local card-boundary detection, text OCR, and keyword/position classification. */
 internal object CardOcr {
     private const val language = "chi_sim"
     private const val minimumModelBytes = 1_000_000L
     private const val maxImageDimension = 2400
 
-    suspend fun readCardSuffix(context: Context, imageUri: Uri): String? = withContext(Dispatchers.IO) {
+    suspend fun scan(context: Context, imageUri: Uri): CardScanResult = withContext(Dispatchers.IO) {
         val dataDirectory = File(context.filesDir, "tesseract")
         val tessdataDirectory = File(dataDirectory, "tessdata")
         val model = File(tessdataDirectory, "$language.traineddata")
@@ -26,7 +55,30 @@ internal object CardOcr {
             installBundledModel(context, model)
         }
 
-        val bitmap = decodeBitmap(context, imageUri)
+        val originalBitmap = decodeBitmap(context, imageUri)
+        var rectifiedBitmap: Bitmap? = null
+        try {
+            rectifiedBitmap = CardImageLocator.locateAndRectify(originalBitmap)
+            val textLines = recognizeText(dataDirectory, rectifiedBitmap)
+            val classification = classifyCard(textLines)
+            CardScanResult(
+                type = classification.type,
+                typeConfidence = classification.confidence,
+                matchedKeyword = classification.keyword,
+                lines = textLines,
+                cardNumberSuffix = if (classification.type == RecognizedCardType.CAMPUS_CARD) {
+                    extractCardNumberSuffix(textLines)
+                } else {
+                    null
+                }
+            )
+        } finally {
+            rectifiedBitmap?.recycle()
+            originalBitmap.recycle()
+        }
+    }
+
+    private fun recognizeText(dataDirectory: File, bitmap: Bitmap): List<CardTextLine> {
         val api = TessBaseAPI()
         try {
             if (!api.init(dataDirectory.absolutePath, language)) {
@@ -34,11 +86,164 @@ internal object CardOcr {
             }
             api.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO)
             api.setImage(bitmap)
-            extractLongestDigitRun(api.getUTF8Text().orEmpty())
+
+            val iterator: ResultIterator = api.getResultIterator()
+                ?: return emptyList()
+            try {
+                val results = mutableListOf<CardTextLine>()
+                iterator.begin()
+                do {
+                    val text = iterator.getUTF8Text(PageIteratorLevel.RIL_TEXTLINE)
+                        ?.trim()
+                        .orEmpty()
+                    val bounds = iterator.getBoundingRect(PageIteratorLevel.RIL_TEXTLINE)
+                    if (text.isNotBlank() && bounds.width() > 0 && bounds.height() > 0) {
+                        results += CardTextLine(
+                            text = text,
+                            left = bounds.left.toFloat() / bitmap.width,
+                            top = bounds.top.toFloat() / bitmap.height,
+                            right = bounds.right.toFloat() / bitmap.width,
+                            bottom = bounds.bottom.toFloat() / bitmap.height,
+                            confidence = iterator.confidence(PageIteratorLevel.RIL_TEXTLINE) / 100f
+                        )
+                    }
+                } while (iterator.next(PageIteratorLevel.RIL_TEXTLINE))
+                return results
+            } finally {
+                iterator.delete()
+            }
         } finally {
             api.recycle()
-            bitmap.recycle()
         }
+    }
+
+    private data class CardClassification(
+        val type: RecognizedCardType,
+        val confidence: Float,
+        val keyword: String?
+    )
+
+    private fun classifyCard(lines: List<CardTextLine>): CardClassification {
+        fun normalize(text: String) = text.lowercase(Locale.ROOT)
+            .replace(Regex("[\\s\\p{P}\\p{S}]"), "")
+
+        val reliableLines = lines.filter { it.confidence >= 0.25f }
+        val reliableText = normalize(reliableLines.joinToString("") { it.text })
+        val upperText = normalize(
+            reliableLines.filter { it.centerY <= 0.48f }.joinToString("") { it.text }
+        )
+
+        val permitKeywords = listOf(
+            "港澳居民来往内地通行证",
+            "港澳居民来往内地通行證",
+            "回乡证",
+            "回鄉證",
+            "HOMERETURNPERMIT"
+        )
+        permitKeywords.firstOrNull { keyword ->
+            val normalizedKeyword = normalize(keyword)
+            upperText.contains(normalizedKeyword) ||
+                lines.any {
+                    it.confidence >= 0.25f && it.centerY <= 0.62f &&
+                        normalize(it.text).contains(normalizedKeyword)
+                }
+        }?.let { keyword ->
+            return CardClassification(RecognizedCardType.HOME_RETURN_PERMIT, .96f, keyword)
+        }
+
+        val identityKeywords = listOf(
+            "中华人民共和国居民身份证",
+            "居民身份证",
+            "居民身分證",
+            "身份证",
+            "身分證",
+            "IDENTITYCARD"
+        )
+        identityKeywords.firstOrNull { keyword ->
+            val normalizedKeyword = normalize(keyword)
+            upperText.contains(normalizedKeyword) ||
+                lines.any {
+                    it.confidence >= 0.25f && it.centerY <= 0.62f &&
+                        normalize(it.text).contains(normalizedKeyword)
+                }
+        }?.let { keyword ->
+            return CardClassification(RecognizedCardType.IDENTITY_CARD, .94f, keyword)
+        }
+
+        val explicitCampusKeywords = listOf(
+            "校园一卡通",
+            "校园卡",
+            "学生卡",
+            "一卡通",
+            "CAMPUSCARD",
+            "STUDENTCARD"
+        )
+        explicitCampusKeywords.firstOrNull { keyword ->
+            lines.any { line ->
+                line.confidence >= 0.25f && line.centerY <= 0.68f &&
+                    normalize(line.text).contains(normalize(keyword))
+            }
+        }
+            ?.let { keyword ->
+                return CardClassification(RecognizedCardType.CAMPUS_CARD, .92f, keyword)
+            }
+
+        val universityKeywords = listOf("四川大学", "四川大學", "SICHUANUNIVERSITY", "SCU")
+        val supportKeywords = listOf("学号", "學生", "学生", "校园", "卡号", "一卡通", "STUDENT")
+        val universityAtTop = universityKeywords.firstOrNull { keyword ->
+            lines.any {
+                it.confidence >= 0.25f && it.centerY <= 0.42f &&
+                    normalize(it.text).contains(normalize(keyword))
+            }
+        }
+        val hasCampusContext = supportKeywords.any { normalize(it) in reliableText }
+        if (universityAtTop != null && hasCampusContext) {
+            return CardClassification(RecognizedCardType.CAMPUS_CARD, .80f, universityAtTop)
+        }
+
+        return CardClassification(RecognizedCardType.OTHER, .25f, null)
+    }
+
+    private fun extractCardNumberSuffix(lines: List<CardTextLine>): String? {
+        val numberRegex = Regex("(?:\\d[\\s-]?){4,}")
+        fun numbers(line: CardTextLine): List<String> = numberRegex.findAll(line.text)
+            .map { it.value.filter(Char::isDigit) }
+            .filter { it.length >= 4 }
+            .toList()
+
+        val labelLines = lines.filter { line ->
+            listOf("学号", "學生證號", "卡号", "卡號", "校园卡号", "校园卡號")
+                .any(line.text::contains) && !line.text.contains("电话") && !line.text.contains("電話")
+        }
+        val labelledNumber = labelLines.asSequence()
+            .flatMap { label ->
+                val sameLineNumbers = numbers(label)
+                if (sameLineNumbers.isNotEmpty()) {
+                    sameLineNumbers.asSequence()
+                } else {
+                    lines.asSequence()
+                        .filter { candidate ->
+                            candidate !== label &&
+                                kotlin.math.abs(candidate.centerY - label.centerY) <= 0.12f &&
+                                candidate.left >= label.left - 0.04f
+                        }
+                        .flatMap { numbers(it).asSequence() }
+                }
+            }
+            .maxByOrNull(String::length)
+        if (labelledNumber != null) return labelledNumber.takeLast(4)
+
+        // Fallback only after the card has already been classified as a campus card.
+        return lines.asSequence()
+            .filter { line ->
+                line.centerY in 0.16f..0.90f &&
+                    !listOf("电话", "電話", "出生", "日期", "有效期", "期限")
+                        .any(line.text::contains)
+            }
+            .flatMap { numbers(it).asSequence() }
+            .filter { it.length in 6..20 }
+            .maxByOrNull(String::length)
+            ?.takeLast(4)
     }
 
     private fun installBundledModel(context: Context, destination: File) {
@@ -111,11 +316,4 @@ internal object CardOcr {
         0
     }
 
-    private fun extractLongestDigitRun(text: String): String? =
-        Regex("(?:\\d[\\s-]?){4,}")
-            .findAll(text)
-            .map { match -> match.value.filter(Char::isDigit) }
-            .filter { it.length >= 4 }
-            .maxByOrNull(String::length)
-            ?.takeLast(4)
 }

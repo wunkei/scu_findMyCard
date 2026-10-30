@@ -1,9 +1,6 @@
 package com.example.myapplication
 
-import android.content.ActivityNotFoundException
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -32,7 +29,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.shapes.Capsule
@@ -207,28 +203,47 @@ internal fun PublishScreen(
     var error by rememberSaveable { mutableStateOf("") }
     var ocrMessage by remember { mutableStateOf("") }
     var isRecognizing by remember { mutableStateOf(false) }
-    var pendingPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
-    var pendingPhotoUriText by rememberSaveable { mutableStateOf<String?>(null) }
+    var isScannerOpen by remember { mutableStateOf(false) }
 
     val recognizeImage: (Uri, File?) -> Unit = { imageUri, temporaryFile ->
         coroutineScope.launch {
             isRecognizing = true
-            ocrMessage = "正在本机识别卡面文字…"
+            ocrMessage = "正在定位卡片并识别文字…"
             try {
-                val suffix = CardOcr.readCardSuffix(context, imageUri)
-                if (suffix == null) {
-                    ocrMessage = "没有识别到清晰的卡号尾号，请手动填写卡片特征。"
-                } else {
-                    cardInfo = "尾号 $suffix"
-                    error = ""
-                    ocrMessage = "已填入尾号 $suffix，请核对后再发布。"
+                val result = CardOcr.scan(context, imageUri)
+                when (result.type) {
+                    RecognizedCardType.CAMPUS_CARD -> {
+                        val suffix = result.cardNumberSuffix
+                        if (suffix != null) {
+                            cardInfo = "尾号 $suffix"
+                            error = ""
+                            ocrMessage = "识别为校园卡（${result.matchedKeyword ?: "卡面特征"}），已填入尾号 $suffix，请核对。"
+                        } else {
+                            cardInfo = "校园卡"
+                            error = ""
+                            ocrMessage = "识别为校园卡（${result.matchedKeyword ?: "卡面特征"}），没有找到清晰卡号，请补充外观特征。"
+                        }
+                    }
+                    RecognizedCardType.IDENTITY_CARD,
+                    RecognizedCardType.HOME_RETURN_PERMIT -> {
+                        cardInfo = ""
+                        ocrMessage = "识别为${result.type.title}；此登记只接受校园卡，未回填证件号码。"
+                    }
+                    RecognizedCardType.OTHER -> {
+                        cardInfo = ""
+                        ocrMessage = if (result.lines.isEmpty()) {
+                            "已尝试定位卡片，但没有识别到文字；请重新拍摄或手动填写。"
+                        } else {
+                            "已识别到卡面文字，但类型不明确；请手动确认这是校园卡后填写。"
+                        }
+                    }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (exception: Exception) {
                 val reason = exception.localizedMessage?.take(100)
                 ocrMessage = if (reason.isNullOrBlank()) {
-                    "识别失败，请重试或手动填写卡片特征。"
+                    "卡片定位或识别失败，请调整角度后重试。"
                 } else {
                     "识别失败：$reason"
                 }
@@ -236,21 +251,6 @@ internal fun PublishScreen(
                 temporaryFile?.delete()
                 isRecognizing = false
             }
-        }
-    }
-
-    val galleryPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) recognizeImage(uri, null)
-    }
-    val cameraCapture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captured ->
-        val uri = pendingPhotoUriText?.let { Uri.parse(it) }
-        val photo = pendingPhotoPath?.let { File(it) }
-        pendingPhotoUriText = null
-        pendingPhotoPath = null
-        if (captured && uri != null) {
-            recognizeImage(uri, photo)
-        } else {
-            photo?.delete()
         }
     }
 
@@ -267,48 +267,15 @@ internal fun PublishScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             OcrActionButton(
-                title = if (isRecognizing) "正在识别…" else "拍照识别",
-                modifier = Modifier.weight(1f),
+                title = if (isRecognizing) "正在识别…" else "扫描卡片",
+                modifier = Modifier.fillMaxWidth(),
                 enabled = !isRecognizing
             ) {
-                var photo: File? = null
-                try {
-                    val directory = File(context.cacheDir, "ocr")
-                    if (!directory.exists() && !directory.mkdirs()) {
-                        throw IllegalStateException("无法创建图片缓存目录。")
-                    }
-                    val createdPhoto = File.createTempFile("found-card-", ".jpg", directory)
-                    photo = createdPhoto
-                    val uri = FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        createdPhoto
-                    )
-                    pendingPhotoPath = createdPhoto.absolutePath
-                    pendingPhotoUriText = uri.toString()
-                    cameraCapture.launch(uri)
-                } catch (_: ActivityNotFoundException) {
-                    photo?.delete()
-                    pendingPhotoPath = null
-                    pendingPhotoUriText = null
-                    ocrMessage = "未找到可用的相机应用。"
-                } catch (_: Exception) {
-                    photo?.delete()
-                    pendingPhotoPath = null
-                    pendingPhotoUriText = null
-                    ocrMessage = "无法打开相机，请改用相册选择图片。"
-                }
-            }
-            OcrActionButton(
-                title = "相册选择",
-                modifier = Modifier.weight(1f),
-                enabled = !isRecognizing
-            ) {
-                galleryPicker.launch("image/*")
+                isScannerOpen = true
             }
         }
         Text(
-            "中文识别模型已随安装包准备好；图片仅在本机识别，只填入卡号尾号。",
+            "对齐卡片后拍摄；系统会先矫正卡面，再按文字内容与位置判断类型。仅校园卡可回填尾号。",
             color = ScreenMuted,
             fontSize = 11.sp,
             lineHeight = 16.sp
@@ -392,6 +359,20 @@ internal fun PublishScreen(
                 )
             }
         }
+    }
+
+    if (isScannerOpen) {
+        CardScannerDialog(
+            onDismiss = { isScannerOpen = false },
+            onImageCaptured = { uri, file ->
+                isScannerOpen = false
+                recognizeImage(uri, file)
+            },
+            onImageSelected = { uri ->
+                isScannerOpen = false
+                recognizeImage(uri, null)
+            }
+        )
     }
 }
 
