@@ -47,7 +47,7 @@ private val ScreenMuted = Color(0xFF718093)
 private val BrandBlue = Color(0xFF2878C8)
 private val SuccessGreen = Color(0xFF278566)
 private val WarmOrange = Color(0xFFDE8958)
-private val CardWhite = Color.White.copy(alpha = .95f)
+private val CardWhite = Color.White
 
 private val demoPosts = listOf(
     LostFoundPost(
@@ -107,7 +107,7 @@ internal fun DiscoverScreen(
                 .any { it.contains(searchQuery.trim(), ignoreCase = true) })
     }
 
-    PageShell(backdrop, Color(0xFFF7FBFF), Color(0xFF78B9F2)) {
+    PageShell(backdrop) {
         PageHeader(
             eyebrow = "SCU · FIND MY CARD",
             title = "发现",
@@ -220,7 +220,7 @@ internal fun PublishScreen(
     onTypeSelected: (String) -> Unit,
     onSubmit: (LostFoundPost) -> Unit
 ) {
-    PageShell(backdrop, Color(0xFFFFF9F3), Color(0xFFF3A679)) {
+    PageShell(backdrop) {
         if (selectedType.isBlank()) {
             PageHeader(
                 eyebrow = "PUBLISH",
@@ -367,7 +367,7 @@ internal fun ProfileScreen(backdrop: LayerBackdrop, userPosts: List<LostFoundPos
     val openPosts = userPosts.filter { it.status != "已归还" && it.status != "已解决" }
     val completedPosts = userPosts.size - openPosts.size
 
-    PageShell(backdrop, Color(0xFFF7F6FF), Color(0xFF9B8FE8)) {
+    PageShell(backdrop) {
         PageHeader(
             eyebrow = "MY CAMPUS",
             title = "我的",
@@ -461,16 +461,10 @@ internal fun ProfileScreen(backdrop: LayerBackdrop, userPosts: List<LostFoundPos
 @Composable
 private fun PageShell(
     backdrop: LayerBackdrop,
-    backgroundColor: Color,
-    stripeColor: Color,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Box(Modifier.fillMaxSize()) {
-        CloudBackdrop(
-            modifier = Modifier.matchParentSize().layerBackdrop(backdrop),
-            backgroundColor = backgroundColor,
-            stripeColor = stripeColor
-        )
+        WhitePageBackground(Modifier.matchParentSize().layerBackdrop(backdrop))
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -486,21 +480,9 @@ private fun PageShell(
 }
 
 @Composable
-private fun CloudBackdrop(modifier: Modifier, backgroundColor: Color, stripeColor: Color) {
+private fun WhitePageBackground(modifier: Modifier) {
     Canvas(modifier) {
-        drawRect(backgroundColor)
-        val stripeWidth = 26.dp.toPx()
-        val gap = 26.dp.toPx()
-        var x = -size.height
-        while (x < size.width) {
-            drawLine(
-                color = stripeColor.copy(alpha = .18f),
-                start = androidx.compose.ui.geometry.Offset(x, size.height),
-                end = androidx.compose.ui.geometry.Offset(x + size.height, 0f),
-                strokeWidth = stripeWidth
-            )
-            x += stripeWidth + gap
-        }
+        drawRect(Color.White)
     }
 }
 
@@ -519,7 +501,7 @@ private fun SearchBox(value: String, onValueChange: (String) -> Unit, placeholde
         shape = RoundedCornerShape(16.dp),
         color = CardWhite,
         shadowElevation = 1.dp,
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xFFE8EDF2), RoundedCornerShape(16.dp))
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().heightIn(min = 54.dp).padding(horizontal = 15.dp, vertical = 12.dp),
@@ -647,7 +629,7 @@ private fun FormTextField(
         Surface(
             shape = RoundedCornerShape(14.dp),
             color = CardWhite,
-            modifier = Modifier.fillMaxWidth().border(1.dp, Color.White, RoundedCornerShape(14.dp))
+            modifier = Modifier.fillMaxWidth().border(1.dp, Color(0xFFE8EDF2), RoundedCornerShape(14.dp))
         ) {
             BasicTextField(
                 value = value,
@@ -787,7 +769,7 @@ private fun InfoCard(
     content: @Composable ColumnScope.() -> Unit
 ) {
     Surface(
-        modifier = modifier,
+        modifier = modifier.border(1.dp, Color(0xFFE8EDF2), RoundedCornerShape(19.dp)),
         shape = RoundedCornerShape(19.dp),
         color = CardWhite,
         shadowElevation = 1.dp
