@@ -68,8 +68,9 @@ internal object CardOcr {
     private fun decodeBitmap(context: Context, uri: Uri): Bitmap {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        val boundsStream = resolver.openInputStream(uri)
             ?: throw IllegalStateException("无法读取所选图片。")
+        boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
             throw IllegalStateException("所选文件不是有效图片。")
         }

@@ -225,8 +225,13 @@ internal fun PublishScreen(
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
-            } catch (_: Exception) {
-                ocrMessage = "识别失败，请重试或手动填写卡片特征。"
+            } catch (exception: Exception) {
+                val reason = exception.localizedMessage?.take(100)
+                ocrMessage = if (reason.isNullOrBlank()) {
+                    "识别失败，请重试或手动填写卡片特征。"
+                } else {
+                    "识别失败：$reason"
+                }
             } finally {
                 temporaryFile?.delete()
                 isRecognizing = false
