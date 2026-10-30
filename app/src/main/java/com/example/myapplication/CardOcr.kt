@@ -131,4 +131,3 @@ internal object CardOcr {
             .maxByOrNull(String::length)
             ?.takeLast(4)
 }
-}
