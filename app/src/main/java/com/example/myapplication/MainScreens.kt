@@ -120,25 +120,6 @@ internal fun DiscoverScreen(
             placeholder = "输入卡号尾号、校区或地点"
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            QuickActionCard(
-                modifier = Modifier.weight(1f),
-                symbol = "⌕",
-                tint = BrandBlue,
-                title = "我要寻卡",
-                subtitle = "发布遗失信息",
-                onClick = { onStartPublish("寻卡") }
-            )
-            QuickActionCard(
-                modifier = Modifier.weight(1f),
-                symbol = "✓",
-                tint = SuccessGreen,
-                title = "我捡到卡",
-                subtitle = "帮助失主找回",
-                onClick = { onStartPublish("拾卡") }
-            )
-        }
-
         Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
@@ -527,28 +508,6 @@ private fun SearchBox(value: String, onValueChange: (String) -> Unit, placeholde
                 Text("×", color = ScreenMuted, fontSize = 20.sp, modifier = Modifier.clickable { onValueChange("") })
             }
         }
-    }
-}
-
-@Composable
-private fun QuickActionCard(
-    modifier: Modifier,
-    symbol: String,
-    tint: Color,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit
-) {
-    InfoCard(modifier = modifier.clickable(onClick = onClick)) {
-        Box(
-            modifier = Modifier.size(34.dp).clip(CircleShape).background(tint.copy(alpha = .12f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(symbol, color = tint, fontWeight = FontWeight.Bold, fontSize = 19.sp)
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(title, color = ScreenInk, fontSize = 14.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Text(subtitle, color = ScreenMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
