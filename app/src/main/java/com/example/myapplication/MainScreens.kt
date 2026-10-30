@@ -1,5 +1,9 @@
 package com.example.myapplication
 
+import android.content.ActivityNotFoundException
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,11 +29,16 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.shapes.Capsule
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
+import java.io.File
 
 internal data class LostFoundPost(
     val type: String,
@@ -188,12 +197,57 @@ internal fun PublishScreen(
     onSubmit: (LostFoundPost) -> Unit
 ) {
     // Full card identifiers stay in transient UI state and are never stored in the post.
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
     var cardInfo by remember { mutableStateOf("") }
     var campus by rememberSaveable { mutableStateOf("") }
     var location by rememberSaveable { mutableStateOf("") }
     var foundDate by rememberSaveable { mutableStateOf("今天") }
     var custodyStatus by rememberSaveable { mutableStateOf("由我暂时保管") }
     var error by rememberSaveable { mutableStateOf("") }
+    var ocrMessage by remember { mutableStateOf("") }
+    var isRecognizing by remember { mutableStateOf(false) }
+    var pendingPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingPhotoUriText by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val recognizeImage: (Uri, File?) -> Unit = { imageUri, temporaryFile ->
+        coroutineScope.launch {
+            isRecognizing = true
+            ocrMessage = "正在本机识别卡面文字…"
+            try {
+                val suffix = CardOcr.readCardSuffix(context, imageUri)
+                if (suffix == null) {
+                    ocrMessage = "没有识别到清晰的卡号尾号，请手动填写卡片特征。"
+                } else {
+                    cardInfo = "尾号 $suffix"
+                    error = ""
+                    ocrMessage = "已填入尾号 $suffix，请核对后再发布。"
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                ocrMessage = "识别失败。首次使用需联网下载模型，请检查网络后重试。"
+            } finally {
+                temporaryFile?.delete()
+                isRecognizing = false
+            }
+        }
+    }
+
+    val galleryPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) recognizeImage(uri, null)
+    }
+    val cameraCapture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { captured ->
+        val uri = pendingPhotoUriText?.let { Uri.parse(it) }
+        val photo = pendingPhotoPath?.let { File(it) }
+        pendingPhotoUriText = null
+        pendingPhotoPath = null
+        if (captured && uri != null) {
+            recognizeImage(uri, photo)
+        } else {
+            photo?.delete()
+        }
+    }
 
     PageShell(backdrop) {
         Text("登记拾获信息", fontSize = 24.sp, lineHeight = 29.sp, fontWeight = FontWeight.Bold, color = ScreenInk)
@@ -203,6 +257,67 @@ internal fun PublishScreen(
             onValueChange = { cardInfo = it; error = "" },
             placeholder = "例如：尾号 3821 / 蓝色卡套；不要填写完整卡号"
         )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            OcrActionButton(
+                title = if (isRecognizing) "正在识别…" else "拍照识别",
+                modifier = Modifier.weight(1f),
+                enabled = !isRecognizing
+            ) {
+                var photo: File? = null
+                try {
+                    val directory = File(context.cacheDir, "ocr")
+                    if (!directory.exists() && !directory.mkdirs()) {
+                        throw IllegalStateException("无法创建图片缓存目录。")
+                    }
+                    val createdPhoto = File.createTempFile("found-card-", ".jpg", directory)
+                    photo = createdPhoto
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        createdPhoto
+                    )
+                    pendingPhotoPath = createdPhoto.absolutePath
+                    pendingPhotoUriText = uri.toString()
+                    cameraCapture.launch(uri)
+                } catch (_: ActivityNotFoundException) {
+                    photo?.delete()
+                    pendingPhotoPath = null
+                    pendingPhotoUriText = null
+                    ocrMessage = "未找到可用的相机应用。"
+                } catch (_: Exception) {
+                    photo?.delete()
+                    pendingPhotoPath = null
+                    pendingPhotoUriText = null
+                    ocrMessage = "无法打开相机，请改用相册选择图片。"
+                }
+            }
+            OcrActionButton(
+                title = "相册选择",
+                modifier = Modifier.weight(1f),
+                enabled = !isRecognizing
+            ) {
+                galleryPicker.launch("image/*")
+            }
+        }
+        Text(
+            "首次使用需联网下载约 2.4 MB 中文模型；图片仅在本机识别，只填入卡号尾号。",
+            color = ScreenMuted,
+            fontSize = 11.sp,
+            lineHeight = 16.sp
+        )
+        if (ocrMessage.isNotBlank()) {
+            val isOcrError = ocrMessage.startsWith("识别失败") ||
+                ocrMessage.startsWith("无法") ||
+                ocrMessage.startsWith("未找到")
+            Text(
+                ocrMessage,
+                color = if (isOcrError) Color(0xFFB5473C) else BrandBlue,
+                fontSize = 12.sp
+            )
+        }
         Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
             Text("拾获校区", fontSize = 13.sp, color = ScreenInk, fontWeight = FontWeight.SemiBold)
             Row(
@@ -527,6 +642,31 @@ private fun FormTextField(
                     }
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun OcrActionButton(
+    title: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(13.dp),
+        color = if (enabled) Color(0xFFEAF3FB) else Color(0xFFF2F4F6),
+        modifier = modifier
+            .heightIn(min = 46.dp)
+            .border(1.dp, Color(0xFFD8E8F5), RoundedCornerShape(13.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 11.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(title, color = if (enabled) BrandBlue else ScreenMuted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         }
     }
 }
