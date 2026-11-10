@@ -1,4 +1,4 @@
-package com.example.myapplication
+package com.example.myapplication.util
 
 import android.Manifest
 import android.content.Context
@@ -73,10 +73,9 @@ object LocationHelper {
     }
 
     private suspend fun obtainRawLocation(context: Context): Location? {
-        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        val locationManager = (context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager)
             ?: return null
 
-        // 1. First check recent cache
         var bestCache: Location? = null
         val providers = listOf(
             LocationManager.GPS_PROVIDER,
@@ -96,13 +95,11 @@ object LocationHelper {
             }
         }
 
-        // If cache is fresh within 2 minutes, use it directly
         val twoMinutesAgo = System.currentTimeMillis() - 2 * 60 * 1000
         if (bestCache != null && bestCache.time > twoMinutesAgo) {
             return bestCache
         }
 
-        // 2. Request a single fresh update
         return suspendCancellableCoroutine { continuation ->
             val listener = object : LocationListener {
                 override fun onLocationChanged(location: Location) {
@@ -151,7 +148,6 @@ object LocationHelper {
         val lat = location.latitude
         val lng = location.longitude
 
-        // Determine closest campus
         var matchedCampus: String? = null
         var minDistance = Float.MAX_VALUE
         val results = FloatArray(1)

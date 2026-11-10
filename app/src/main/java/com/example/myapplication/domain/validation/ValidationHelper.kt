@@ -1,4 +1,4 @@
-package com.example.myapplication
+package com.example.myapplication.domain.validation
 
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -48,7 +48,6 @@ object ValidationHelper {
             return "请输入规范的18位居民身份证号码（前17位数字，末位数字或X）"
         }
 
-        // 验证出生日期有效性
         val birthDateStr = clean.substring(6, 14)
         try {
             val sdf = SimpleDateFormat("yyyyMMdd", Locale.getDefault()).apply {
@@ -63,7 +62,6 @@ object ValidationHelper {
             return "身份证包含的出生日期不合法"
         }
 
-        // 校验码 (ISO 7064:1983.MOD 11-2)
         val weights = intArrayOf(7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2)
         val checkChars = charArrayOf('1', '0', 'X', '9', '8', '7', '6', '5', '4', '3', '2')
         var sum = 0
@@ -97,7 +95,7 @@ object ValidationHelper {
     }
 
     /**
-     * 手机号码格式验证（选填项，但若输入则需符合11位格式）
+     * 手机号码格式验证
      */
     fun validatePhone(phone: String, isOptional: Boolean = true): String? {
         val clean = phone.replace(" ", "").trim()
@@ -112,9 +110,7 @@ object ValidationHelper {
     }
 
     /**
-     * 姓名脱敏展示：
-     * 1. 两位姓名：只显示最后一位（如“张三” -> “*三”）
-     * 2. 三位及以上：只显示前后两位（前1位和后1位，中间全部打码，如“张三丰” -> “张*丰”，“诸葛孔明” -> “诸**明”）
+     * 姓名脱敏展示
      */
     fun maskPersonName(name: String): String {
         val clean = name.trim()
@@ -127,10 +123,7 @@ object ValidationHelper {
     }
 
     /**
-     * 证件号码脱敏展示：
-     * 1. 身份证：显示前面6位以及最后2位（如“510107**********34”）
-     * 2. 校园卡：只显示前面4位和最后3位（如“2022******001”）
-     * 3. 其他证件：只显示前面2位以及最后2位（如“EE****78”）
+     * 证件号码脱敏展示
      */
     fun maskDocumentNumber(docTypeOrTitle: String, docNumber: String): String {
         val clean = docNumber.replace(" ", "").trim().uppercase()

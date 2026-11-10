@@ -1,7 +1,11 @@
-package com.example.myapplication
+package com.example.myapplication.data.repository
 
 import android.content.Context
 import androidx.core.content.edit
+import com.example.myapplication.data.local.PostDatabaseHelper
+import com.example.myapplication.data.model.LostFoundPost
+import com.example.myapplication.data.model.UserProfile
+import com.example.myapplication.domain.matching.MatchNotificationHelper
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,7 +69,6 @@ class SqlitePostRepository(
             dbHelper.insertPost(post)
             _postsFlow.value = dbHelper.getAllPosts()
 
-            // Built-in matching engine: check against current user or registered users
             val current = _currentUserFlow.value
             if (current != null && MatchNotificationHelper.isPostMatchingUser(post, current)) {
                 MatchNotificationHelper.sendMatchNotification(appContext, post)
@@ -128,7 +131,6 @@ class SqlitePostRepository(
         withContext(ioDispatcher) {
             dbHelper.saveUserProfile(profile)
             _allUsersFlow.value = dbHelper.getAllUserProfiles()
-            // Auto login upon registration/save
             prefs.edit { putString("active_student_id", profile.studentId) }
             _currentUserFlow.value = profile
         }

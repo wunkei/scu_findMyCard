@@ -1,9 +1,11 @@
-package com.example.myapplication
+package com.example.myapplication.data.local
 
 import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import com.example.myapplication.data.model.LostFoundPost
+import com.example.myapplication.data.model.UserProfile
 
 class PostDatabaseHelper(context: Context) : SQLiteOpenHelper(
     context,

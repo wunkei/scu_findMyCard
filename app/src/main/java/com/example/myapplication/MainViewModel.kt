@@ -3,6 +3,13 @@ package com.example.myapplication
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.myapplication.data.model.LostFoundPost
+import com.example.myapplication.data.model.UserProfile
+import com.example.myapplication.data.repository.PostRepository
+import com.example.myapplication.data.repository.SqlitePostRepository
+import com.example.myapplication.domain.auth.EduroamAuthHelper
+import com.example.myapplication.domain.auth.EduroamResult
+import com.example.myapplication.domain.matching.MatchNotificationHelper
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine

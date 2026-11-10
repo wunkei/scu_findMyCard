@@ -1,4 +1,4 @@
-package com.example.myapplication
+package com.example.myapplication.domain.auth
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -41,7 +41,6 @@ object EduroamAuthHelper {
         }
 
         try {
-            // 1. GET page & collect cookies and CSRF token
             val pageConnection = (URL(PAGE_URL).openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
                 connectTimeout = TIMEOUT_MS
@@ -56,7 +55,6 @@ object EduroamAuthHelper {
                 return@withContext EduroamResult.Error("无法连接到 eduroam 验证服务器 (HTTP $responseCode)")
             }
 
-            // Extract Set-Cookie headers
             val cookies = extractCookies(pageConnection)
 
             val pageHtml = BufferedReader(InputStreamReader(pageConnection.inputStream, "UTF-8")).use {
@@ -67,11 +65,9 @@ object EduroamAuthHelper {
             val csrfToken = extractCsrfToken(pageHtml)
                 ?: return@withContext EduroamResult.Error("无法从验证页面获取安全凭证 (CSRF Token)")
 
-            // 2. Generate random 16-digit sid: "0.xxxxxxxxxxxxxxxx"
             val randomDigits = Random.nextLong(0, 10_000_000_000_000_000L)
             val sid = "0.%016d".format(Locale.ROOT, randomDigits)
 
-            // 3. POST authentication payload
             val postConnection = (URL(POST_URL).openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = TIMEOUT_MS
@@ -122,7 +118,6 @@ object EduroamAuthHelper {
             }
             postConnection.disconnect()
 
-            // 4. Parse JSON result
             parseEduroamResponse(responseText)
 
         } catch (_: Exception) {
