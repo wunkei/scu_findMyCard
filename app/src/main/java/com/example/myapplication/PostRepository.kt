@@ -68,7 +68,7 @@ class SqlitePostRepository(
             // Built-in matching engine: check against current user or registered users
             val current = _currentUserFlow.value
             if (current != null && MatchNotificationHelper.isPostMatchingUser(post, current)) {
-                MatchNotificationHelper.sendMatchNotification(appContext, post, current)
+                MatchNotificationHelper.sendMatchNotification(appContext, post)
             }
         }
     }

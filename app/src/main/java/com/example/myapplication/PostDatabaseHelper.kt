@@ -9,7 +9,7 @@ class PostDatabaseHelper(context: Context) : SQLiteOpenHelper(
     context,
     DATABASE_NAME,
     null,
-    DATABASE_VERSION
+    DATABASE_VERSION,
 ) {
     companion object {
         const val DATABASE_NAME = "find_my_card.db"
@@ -163,8 +163,8 @@ class PostDatabaseHelper(context: Context) : SQLiteOpenHelper(
             val createdAtIndex = it.getColumnIndexOrThrow(COLUMN_CREATED_AT)
 
             while (it.moveToNext()) {
-                val lat = if (latIndex != -1 && !it.isNull(latIndex)) it.getDouble(latIndex) else null
-                val lng = if (lngIndex != -1 && !it.isNull(lngIndex)) it.getDouble(lngIndex) else null
+                val lat = if ((latIndex != -1) && !it.isNull(latIndex)) it.getDouble(latIndex) else null
+                val lng = if ((lngIndex != -1) && !it.isNull(lngIndex)) it.getDouble(lngIndex) else null
                 val img = if (imgIndex != -1) it.getString(imgIndex).orEmpty() else ""
 
                 posts.add(
@@ -356,10 +356,5 @@ class PostDatabaseHelper(context: Context) : SQLiteOpenHelper(
             }
         }
         return list
-    }
-
-    fun deleteUserProfile(studentId: String): Int {
-        val db = writableDatabase
-        return db.delete(TABLE_USERS, "$COLUMN_USER_STUDENT_ID = ?", arrayOf(studentId))
     }
 }

@@ -27,7 +27,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.PlatformTextStyle
@@ -51,7 +50,6 @@ import com.kyant.shapes.Capsule
 import com.example.myapplication.ui.theme.MyApplicationTheme
 
 private val Ink = Color(0xFF20231F)
-private val Muted = Color(0xFF898D84)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,13 +94,11 @@ private fun MainScreen(viewModel: MainViewModel = viewModel()) {
                     "发布" -> PublishScreen(
                         backdrop = backdrop,
                         currentUser = currentUser,
-                        allUsers = allUsers,
                         onLogin = { studentId, password, callback -> viewModel.login(studentId, password, callback) },
                         onResetPassword = { studentId, eduroamPass, newPass, callback ->
                             viewModel.resetPasswordViaEduroam(studentId, eduroamPass, newPass, callback)
                         },
                         onNavigateToRegister = { isRegistering = true },
-                        onSaveUser = { profile -> viewModel.saveUser(profile) },
                         onSubmit = { post ->
                             viewModel.publishPost(post)
                             selected = "发现"
@@ -135,40 +131,6 @@ private fun MainScreen(viewModel: MainViewModel = viewModel()) {
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 38.dp)
             )
         }
-    }
-}
-
-private fun capsuleWindowPath(
-    size: androidx.compose.ui.geometry.Size,
-    tabWidthPx: Float,
-    insetPx: Float,
-    visualIndex: Float,
-    capsuleHeightPx: Float,
-    capsuleScaleX: Float,
-    capsuleScaleY: Float,
-    outerScaleX: Float = 1f,
-    outerScaleY: Float = 1f
-): Path {
-    val centerX = insetPx + visualIndex * tabWidthPx + tabWidthPx / 2f
-    val centerY = size.height / 2f
-    val halfWidth = tabWidthPx * capsuleScaleX / 2f
-    val halfHeight = capsuleHeightPx * capsuleScaleY / 2f
-    val outerCenterX = size.width / 2f
-    val outerCenterY = size.height / 2f
-    val left = outerCenterX + (centerX - halfWidth - outerCenterX) / outerScaleX
-    val right = outerCenterX + (centerX + halfWidth - outerCenterX) / outerScaleX
-    val top = outerCenterY + (centerY - halfHeight - outerCenterY) / outerScaleY
-    val bottom = outerCenterY + (centerY + halfHeight - outerCenterY) / outerScaleY
-    val baseRadius = minOf(tabWidthPx, capsuleHeightPx) / 2f
-    val radiusX = baseRadius * capsuleScaleX / outerScaleX
-    val radiusY = baseRadius * capsuleScaleY / outerScaleY
-    return Path().apply {
-        addRoundRect(
-            androidx.compose.ui.geometry.RoundRect(
-                androidx.compose.ui.geometry.Rect(left, top, right, bottom),
-                androidx.compose.ui.geometry.CornerRadius(radiusX, radiusY)
-            )
-        )
     }
 }
 
@@ -207,12 +169,9 @@ private fun FloatingGlassNav(backdrop: com.kyant.backdrop.Backdrop, selected: St
         val tabWidth = (maxWidth - 10.dp) / 3
         val tabWidthPx = with(density) { tabWidth.toPx() }
         val insetPx = with(density) { 5.dp.toPx() }
-        val navScaleX = 1f + pressProgress * .04f
-        val navScaleY = 1f + pressProgress * .08f
         val capsulePhase = kotlin.math.abs(visualIndex - selectedIndex)
         val capsuleScaleX = 1f + capsulePhase * .04f + pressProgress * .250f
         val capsuleScaleY = 1f + capsulePhase * .03f + pressProgress * .450f
-        val capsuleHeightPx = with(density) { 36.dp.toPx() }
 
         // 1. Bottom: nav gray body
         Box(
@@ -257,9 +216,9 @@ private fun FloatingGlassNav(backdrop: com.kyant.backdrop.Backdrop, selected: St
             Modifier.fillMaxSize().padding(horizontal = 5.dp).layerBackdrop(capsuleContentBackdrop),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            NavTabContent("⌕", "发现", Modifier.weight(1f), selected = true)
-            NavTabContent("＋", "", Modifier.weight(1f), selected = true)
-            NavTabContent("○", "我的", Modifier.weight(1f), selected = true)
+            NavTabContent("⌕", "发现", Modifier.weight(1f))
+            NavTabContent("＋", "", Modifier.weight(1f))
+            NavTabContent("○", "我的", Modifier.weight(1f))
         }
         Box(
             Modifier
@@ -431,16 +390,16 @@ private fun FloatingGlassNav(backdrop: com.kyant.backdrop.Backdrop, selected: St
                 Modifier.fillMaxSize().graphicsLayer { alpha = topTextAlpha },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                NavTabContent("⌕", "发现", Modifier.weight(1f), selected = true)
-                NavTabContent("＋", "", Modifier.weight(1f), selected = true)
-                NavTabContent("○", "我的", Modifier.weight(1f), selected = true)
+                NavTabContent("⌕", "发现", Modifier.weight(1f))
+                NavTabContent("＋", "", Modifier.weight(1f))
+                NavTabContent("○", "我的", Modifier.weight(1f))
             }
         }
     }
 }
 
 @Composable
-private fun NavTabContent(icon: String, label: String, modifier: Modifier = Modifier, selected: Boolean = true) {
+private fun NavTabContent(icon: String, label: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier.fillMaxHeight(),
         contentAlignment = Alignment.Center
@@ -464,7 +423,7 @@ private fun NavTabContent(icon: String, label: String, modifier: Modifier = Modi
             ) {
                 Text(
                     text = icon,
-                    color = if (selected) Ink else Muted,
+                    color = Ink,
                     fontSize = 17.sp,
                     lineHeight = 18.sp,
                     fontWeight = FontWeight.Normal,
@@ -475,10 +434,10 @@ private fun NavTabContent(icon: String, label: String, modifier: Modifier = Modi
                 Spacer(Modifier.height(1.dp))
                 Text(
                     text = label,
-                    color = if (selected) Ink else Muted,
+                    color = Ink,
                     fontSize = 9.sp,
                     lineHeight = 10.sp,
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                    fontWeight = FontWeight.SemiBold,
                     style = TextStyle(
                         platformStyle = PlatformTextStyle(includeFontPadding = false)
                     )

@@ -4,7 +4,6 @@ import android.Manifest
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -501,11 +500,9 @@ private fun formatCurrentDateTime(): String {
 internal fun PublishScreen(
     backdrop: LayerBackdrop,
     currentUser: UserProfile?,
-    allUsers: List<UserProfile>,
     onLogin: (String, String, (Boolean) -> Unit) -> Unit,
     onResetPassword: (String, String, String, (EduroamResult) -> Unit) -> Unit,
     onNavigateToRegister: () -> Unit,
-    onSaveUser: (UserProfile) -> Unit,
     onSubmit: (LostFoundPost) -> Unit
 ) {
     // Full document details stay on the in-memory post and are omitted from public listings.
@@ -1122,7 +1119,7 @@ internal fun ProfileScreen(
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
                                         color = Color(0xFFFFF9F5),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFFEDD5)),
+                                        border = BorderStroke(1.dp, Color(0xFFFFEDD5)),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1926,20 +1923,6 @@ private fun PageShell(
 }
 
 @Composable
-private fun WhitePageBackground(modifier: Modifier) {
-    Canvas(modifier) {
-        drawRect(Color.White)
-    }
-}
-
-@Composable
-private fun PageHeader(eyebrow: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text(eyebrow, color = BrandBlue, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
-    }
-}
-
-@Composable
 private fun SearchBox(value: String, onValueChange: (String) -> Unit, placeholder: String) {
     Surface(
         shape = RoundedCornerShape(16.dp),
@@ -2030,33 +2013,6 @@ private fun TagPill(text: String, tint: Color) {
             .background(tint.copy(alpha = .10f))
             .padding(horizontal = 9.dp, vertical = 5.dp)
     )
-}
-
-@Composable
-private fun PublishOptionCard(
-    symbol: String,
-    tint: Color,
-    title: String,
-    subtitle: String,
-    buttonLabel: String,
-    onClick: () -> Unit
-) {
-    InfoCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(
-                modifier = Modifier.size(46.dp).clip(RoundedCornerShape(15.dp)).background(tint.copy(alpha = .12f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(symbol, color = tint, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-            }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(title, color = ScreenInk, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                Text(subtitle, color = ScreenMuted, fontSize = 12.sp, lineHeight = 17.sp)
-            }
-        }
-        Spacer(Modifier.height(15.dp))
-        Text(buttonLabel + "   →", color = tint, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-    }
 }
 
 @Composable

@@ -50,7 +50,7 @@ object MatchNotificationHelper {
         return matchByStudentId || matchByIdCard
     }
 
-    fun sendMatchNotification(context: Context, post: LostFoundPost, user: UserProfile) {
+    fun sendMatchNotification(context: Context, post: LostFoundPost) {
         ensureChannel(context)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
