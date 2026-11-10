@@ -72,27 +72,39 @@ private val SuccessGreen = Color(0xFF278566)
 private val WarmOrange = Color(0xFFDE8958)
 private val CardWhite = Color.White
 
+private fun getPostDisplayTitle(post: LostFoundPost): String {
+    val docName = post.title.substringBefore(" · ").ifBlank { "证件" }
+    val status = when {
+        post.status.contains("已归还") -> "已归还失主"
+        post.status == "还在原地" -> "还在原地"
+        post.status == "由我暂时保管" || post.status == "由发布者代为保管" || post.status == "待认领" -> "由发布者代为保管"
+        post.status == "寻找中" -> "寻找中"
+        else -> post.status
+    }
+    return "$docName · $status"
+}
+
 private val demoPosts = listOf(
     LostFoundPost(
         type = "拾卡",
-        status = "待认领",
-        title = "校园卡 · 待认领",
+        status = "还在原地",
+        title = "校园卡 · 还在原地",
         campus = "江安校区",
         location = "第一教学楼附近",
         date = "10月29日",
-        note = "在教学楼附近拾获，认领时请出示有效身份证明核对。",
+        note = "",
         isDemo = true,
         personName = "张三丰",
         documentNumber = "2023141440001"
     ),
     LostFoundPost(
-        type = "寻卡",
-        status = "寻找中",
-        title = "居民身份证 · 寻卡求助",
+        type = "拾卡",
+        status = "由发布者代为保管",
+        title = "居民身份证 · 由发布者代为保管",
         campus = "望江校区",
         location = "图书馆附近",
         date = "10月28日",
-        note = "在图书馆附近遗失，如有线索请联系失主。",
+        note = "",
         isDemo = true,
         personName = "李四",
         documentNumber = "510107200305011234"
@@ -100,11 +112,11 @@ private val demoPosts = listOf(
     LostFoundPost(
         type = "拾卡",
         status = "还在原地",
-        title = "学生证 · 拾获登记",
+        title = "学生证 · 还在原地",
         campus = "华西校区",
         location = "食堂入口附近",
         date = "10月27日",
-        note = "证件暂时还在拾获地点。",
+        note = "",
         isDemo = true,
         personName = "诸葛孔明",
         documentNumber = "EE12345678"
@@ -226,7 +238,7 @@ internal fun DiscoverScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(post.title, color = ScreenInk, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(getPostDisplayTitle(post), color = ScreenInk, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     TagPill(
                         text = post.status,
                         tint = if (post.status.contains("已归还")) SuccessGreen else BrandBlue
@@ -250,17 +262,16 @@ internal fun DiscoverScreen(
                         ) {
                             Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 if (maskedName.isNotBlank()) {
-                                    Text("脱敏失主姓名：$maskedName", color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                    Text("失主：$maskedName", color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                 }
                                 if (maskedDoc.isNotBlank()) {
-                                    Text("脱敏证件号码：$maskedDoc", color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                    Text("证件号：$maskedDoc", color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                 }
                                 Text("（依据隐私合规政策，大厅公开信息仅脱敏展示）", color = ScreenMuted, fontSize = 11.sp)
                             }
                         }
                     }
-                    Text("${post.campus} · ${post.location}\n${post.date}发布", color = ScreenMuted)
-                    Text(post.note, color = ScreenInk)
+                    Text("⌖  ${post.campus} · ${post.location}\n${post.date}发布", color = ScreenMuted)
 
                     if (post.status.contains("已归还")) {
                         Surface(
@@ -342,7 +353,7 @@ internal fun PublishScreen(
     var campus by rememberSaveable { mutableStateOf("") }
     var location by rememberSaveable { mutableStateOf("") }
     var foundDate by remember { mutableStateOf(formatCurrentDateTime()) }
-    var custodyStatus by rememberSaveable { mutableStateOf("由我暂时保管") }
+    var custodyStatus by rememberSaveable { mutableStateOf("由发布者代为保管") }
     var error by rememberSaveable { mutableStateOf("") }
     val selectedDocument = documentTypeOptions.first { it.name == selectedDocumentName }
 
@@ -507,7 +518,7 @@ internal fun PublishScreen(
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("由我暂时保管", "还在原地").forEach { status ->
+                listOf("由发布者代为保管", "还在原地").forEach { status ->
                     SelectChip(status, selected = custodyStatus == status) { custodyStatus = status }
                 }
             }
@@ -542,11 +553,8 @@ internal fun PublishScreen(
                     return@PrimaryActionButton
                 }
 
-                val safeTitle = "$selectedDocumentName · 拾获登记"
-                val safeStatusNote = when (custodyStatus) {
-                    "还在原地" -> "证件还在拾获地点。"
-                    else -> "证件目前由拾获者暂时保管。"
-                }
+                val statusDisplay = if (custodyStatus == "还在原地") "还在原地" else "由发布者代为保管"
+                val safeTitle = "$selectedDocumentName · $statusDisplay"
                 val cleanDocNumber = if (selectedDocumentName == "居民身份证") {
                     documentIdentifier.replace(" ", "").trim().uppercase()
                 } else if (selectedDocumentName == "校园卡") {
@@ -557,12 +565,12 @@ internal fun PublishScreen(
                 onSubmit(
                     LostFoundPost(
                         type = "拾卡",
-                        status = custodyStatus,
+                        status = statusDisplay,
                         title = safeTitle,
                         campus = campus,
                         location = location,
                         date = foundDate.trim(),
-                        note = safeStatusNote,
+                        note = "",
                         isDemo = false,
                         personName = personName.trim(),
                         documentNumber = cleanDocNumber
@@ -836,7 +844,6 @@ internal fun ProfileScreen(
                                             Text("卡片姓名：${post.personName} · 号码：${post.documentNumber}", color = ScreenInk, fontSize = 12.sp)
                                             Text("拾获地点：${post.campus} · ${post.location}", color = ScreenMuted, fontSize = 12.sp)
                                             Text("拾获时间：${post.date}", color = ScreenMuted, fontSize = 11.sp)
-                                            Text("保管状态：${post.note}", color = ScreenMuted, fontSize = 11.sp)
 
                                             if (!post.status.contains("已归还")) {
                                                 Button(
@@ -1679,16 +1686,17 @@ private fun LostFoundCard(post: LostFoundPost, onClick: () -> Unit) {
     val tint = if (post.type == "拾卡") SuccessGreen else BrandBlue
     val maskedName = if (post.personName.isNotBlank()) ValidationHelper.maskPersonName(post.personName) else ""
     val maskedDoc = if (post.documentNumber.isNotBlank()) ValidationHelper.maskDocumentNumber(post.title, post.documentNumber) else ""
+    val displayTitle = getPostDisplayTitle(post)
 
     InfoCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             TagPill(post.type + "信息", tint)
-            TagPill(post.status, if (post.status == "待认领") WarmOrange else tint.copy(alpha = .76f))
+            TagPill(post.status, if (post.status == "待认领" || post.status == "由发布者代为保管") WarmOrange else tint.copy(alpha = .76f))
             Spacer(Modifier.weight(1f))
             Text(if (post.isDemo) "演示" else "刚发布", color = ScreenMuted, fontSize = 11.sp)
         }
         Spacer(Modifier.height(12.dp))
-        Text(post.title, color = ScreenInk, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Text(displayTitle, color = ScreenInk, fontSize = 16.sp, fontWeight = FontWeight.Bold)
 
         if (maskedName.isNotBlank() || maskedDoc.isNotBlank()) {
             Spacer(Modifier.height(6.dp))
