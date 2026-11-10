@@ -110,4 +110,60 @@ object ValidationHelper {
         }
         return null
     }
+
+    /**
+     * 姓名脱敏展示：
+     * 1. 两位姓名：只显示最后一位（如“张三” -> “*三”）
+     * 2. 三位及以上：只显示前后两位（前1位和后1位，中间全部打码，如“张三丰” -> “张*丰”，“诸葛孔明” -> “诸**明”）
+     */
+    fun maskPersonName(name: String): String {
+        val clean = name.trim()
+        if (clean.isBlank()) return ""
+        return when (clean.length) {
+            1 -> "*"
+            2 -> "*${clean[1]}"
+            else -> "${clean.first()}${"*".repeat(clean.length - 2)}${clean.last()}"
+        }
+    }
+
+    /**
+     * 证件号码脱敏展示：
+     * 1. 身份证：显示前面6位以及最后2位（如“510107**********34”）
+     * 2. 校园卡：只显示前面4位和最后3位（如“2022******001”）
+     * 3. 其他证件：只显示前面2位以及最后2位（如“EE****78”）
+     */
+    fun maskDocumentNumber(docTypeOrTitle: String, docNumber: String): String {
+        val clean = docNumber.replace(" ", "").trim().uppercase()
+        if (clean.isBlank()) return ""
+
+        val isIdCard = docTypeOrTitle.contains("身份证") || (clean.length == 18 && clean.take(17).all { it.isDigit() })
+        val isCampusCard = docTypeOrTitle.contains("校园卡") || docTypeOrTitle.contains("学生证") || (clean.length == 13 && clean.all { it.isDigit() })
+
+        return when {
+            isIdCard -> {
+                if (clean.length >= 8) {
+                    val starsCount = (clean.length - 8).coerceAtLeast(4)
+                    "${clean.take(6)}${"*".repeat(starsCount)}${clean.takeLast(2)}"
+                } else {
+                    "${clean.take(2)}****${clean.takeLast(1)}"
+                }
+            }
+            isCampusCard -> {
+                if (clean.length >= 7) {
+                    val starsCount = (clean.length - 7).coerceAtLeast(3)
+                    "${clean.take(4)}${"*".repeat(starsCount)}${clean.takeLast(3)}"
+                } else {
+                    "${clean.take(2)}***${clean.takeLast(1)}"
+                }
+            }
+            else -> {
+                if (clean.length >= 4) {
+                    val starsCount = (clean.length - 4).coerceAtLeast(2)
+                    "${clean.take(2)}${"*".repeat(starsCount)}${clean.takeLast(2)}"
+                } else {
+                    "${clean.take(1)}**${clean.takeLast(1)}"
+                }
+            }
+        }
+    }
 }

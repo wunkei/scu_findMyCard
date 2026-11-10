@@ -76,32 +76,38 @@ private val demoPosts = listOf(
     LostFoundPost(
         type = "拾卡",
         status = "待认领",
-        title = "校园卡 · 尾号 ··3821",
+        title = "校园卡 · 待认领",
         campus = "江安校区",
         location = "第一教学楼附近",
         date = "10月29日",
-        note = "在教学楼附近拾获，卡片信息已隐藏。认领时请自行核对卡面信息。",
-        isDemo = true
+        note = "在教学楼附近拾获，认领时请出示有效身份证明核对。",
+        isDemo = true,
+        personName = "张三丰",
+        documentNumber = "2023141440001"
     ),
     LostFoundPost(
         type = "寻卡",
         status = "寻找中",
-        title = "校园卡 · 卡号已隐藏",
+        title = "居民身份证 · 寻卡求助",
         campus = "望江校区",
         location = "图书馆附近",
         date = "10月28日",
-        note = "大约在下午遗失，如有线索请通过安全的方式联系失主。",
-        isDemo = true
+        note = "在图书馆附近遗失，如有线索请联系失主。",
+        isDemo = true,
+        personName = "李四",
+        documentNumber = "510107200305011234"
     ),
     LostFoundPost(
         type = "拾卡",
         status = "还在原地",
-        title = "校园卡 · 卡号已隐藏",
+        title = "学生证 · 拾获登记",
         campus = "华西校区",
         location = "食堂入口附近",
         date = "10月27日",
-        note = "卡片暂时还在拾获地点。此条为界面演示信息。",
-        isDemo = true
+        note = "证件暂时还在拾获地点。",
+        isDemo = true,
+        personName = "诸葛孔明",
+        documentNumber = "EE12345678"
     )
 )
 
@@ -129,8 +135,20 @@ internal fun DiscoverScreen(
                     (selectedCategory == "全部校区" || post.campus.startsWith(selectedCategory))
         }
 
-        val searchMatches = searchQuery.isBlank() || listOf(post.title, post.campus, post.location, post.note)
-            .any { it.contains(searchQuery.trim(), ignoreCase = true) }
+        val searchMatches = if (searchQuery.isBlank()) {
+            true
+        } else {
+            val q = searchQuery.trim()
+            val qDoc = q.replace(" ", "").uppercase()
+            val postDoc = post.documentNumber.replace(" ", "").trim().uppercase()
+            val qName = q.replace(" ", "")
+            val postName = post.personName.replace(" ", "").trim()
+
+            val nameMatch = postName.isNotBlank() && (postName.equals(qName, ignoreCase = true) || postName.contains(qName, ignoreCase = true))
+            val docMatch = postDoc.isNotBlank() && postDoc == qDoc
+
+            nameMatch || docMatch
+        }
 
         statusMatches && searchMatches
     }
@@ -140,7 +158,7 @@ internal fun DiscoverScreen(
         SearchBox(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = "输入卡号尾号、校区或地点"
+            placeholder = "输入失主姓名或完整证件号搜索"
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(11.dp)) {
@@ -181,7 +199,7 @@ internal fun DiscoverScreen(
             } else {
                 EmptyCard(
                     title = "没有找到相关信息",
-                    subtitle = "试试更短的关键词，或登记你捡到的卡片。",
+                    subtitle = "试试输入完整的失主姓名或完整的证件号码搜索。",
                     action = "登记拾获信息",
                     onClick = onStartPublish
                 )
@@ -216,12 +234,31 @@ internal fun DiscoverScreen(
                 }
             },
             text = {
+                val maskedName = if (post.personName.isNotBlank()) ValidationHelper.maskPersonName(post.personName) else ""
+                val maskedDoc = if (post.documentNumber.isNotBlank()) ValidationHelper.maskDocumentNumber(post.title, post.documentNumber) else ""
                 Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                     Text(
                         "${post.type}信息 · ${post.status}",
                         color = if (post.status.contains("已归还")) SuccessGreen else BrandBlue,
                         fontWeight = FontWeight.SemiBold
                     )
+                    if (maskedName.isNotBlank() || maskedDoc.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFF8FAFC),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                if (maskedName.isNotBlank()) {
+                                    Text("脱敏失主姓名：$maskedName", color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                }
+                                if (maskedDoc.isNotBlank()) {
+                                    Text("脱敏证件号码：$maskedDoc", color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                                }
+                                Text("（依据隐私合规政策，大厅公开信息仅脱敏展示）", color = ScreenMuted, fontSize = 11.sp)
+                            }
+                        }
+                    }
                     Text("${post.campus} · ${post.location}\n${post.date}发布", color = ScreenMuted)
                     Text(post.note, color = ScreenInk)
 
@@ -1246,17 +1283,17 @@ internal fun AuthDialog(
                     }
 
                     FormTextField(
-                        label = "四川大学学号 *",
+                        label = "学号 *",
                         value = studentId,
                         onValueChange = { studentId = it; errorMessage = "" },
                         placeholder = "输入您的学号"
                     )
 
                     FormTextField(
-                        label = "校园网/统一身份密码 * (核验所有权)",
+                        label = "校园网密码 * ",
                         value = eduroamPassword,
                         onValueChange = { eduroamPassword = it; errorMessage = "" },
-                        placeholder = "输入四川大学校园网密码",
+                        placeholder = "输入校园网密码",
                         visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         trailing = {
                             Text(
@@ -1271,10 +1308,10 @@ internal fun AuthDialog(
                     )
 
                     FormTextField(
-                        label = "新应用登录密码 *",
+                        label = "新登录密码 *",
                         value = newAppPassword,
                         onValueChange = { newAppPassword = it; errorMessage = "" },
-                        placeholder = "输入新设置的应用登录密码",
+                        placeholder = "输入新设置的登录密码",
                         visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation()
                     )
 
@@ -1290,7 +1327,7 @@ internal fun AuthDialog(
                         ) {
                             Text("🛡️", fontSize = 14.sp)
                             Text(
-                                "校园网密码仅用于单次向官方服务器核验学号归属，通过后将重置为您指定的新密码并自动登录。",
+                                "校园网密码仅用于单次核验，通过后将重置为您指定的新密码并自动登录。",
                                 fontSize = 11.sp,
                                 color = ScreenMuted,
                                 lineHeight = 15.sp
@@ -1324,11 +1361,11 @@ internal fun AuthDialog(
                                 return@PrimaryActionButton
                             }
                             if (eduroamPassword.isBlank()) {
-                                errorMessage = "请输入校园网/eduroam密码进行核验"
+                                errorMessage = "请输入校园网密码进行核验"
                                 return@PrimaryActionButton
                             }
                             if (newAppPassword.isBlank()) {
-                                errorMessage = "请输入新应用登录密码"
+                                errorMessage = "请输入新登录密码"
                                 return@PrimaryActionButton
                             }
 
@@ -1404,7 +1441,7 @@ internal fun ProfileEditDialog(
                             }
                         }
                         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text("川大学号 (主码)", color = ScreenMuted, fontSize = 13.sp)
+                            Text("川大学号", color = ScreenMuted, fontSize = 13.sp)
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text(currentUser.studentId, color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                                 Text("🔒", fontSize = 11.sp)
@@ -1535,16 +1572,10 @@ internal fun ProfileEditDialog(
                         lineHeight = 18.sp
                     )
                     Text(
-                        "如因户籍姓名变更、身份证号码登记错误等特殊原因确需更正，请准备以下证明材料：",
+                        "如因身份证号码登记错误等特殊原因确需更正，联系管理员并提供相关证明材料：",
                         color = ScreenInk,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        "1. 四川大学学生证或校园一卡通原件照片\n2. 居民身份证正反面原件照片\n3. 户籍或教务部门出具的身份变更相关证明材料",
-                        color = ScreenMuted,
-                        fontSize = 12.sp,
-                        lineHeight = 17.sp
                     )
                     Surface(
                         shape = RoundedCornerShape(8.dp),
@@ -1553,8 +1584,8 @@ internal fun ProfileEditDialog(
                     ) {
                         Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("管理员联系方式：", fontSize = 11.sp, color = ScreenMuted, fontWeight = FontWeight.SemiBold)
-                            Text("邮箱：card-admin@scu.edu.cn", fontSize = 12.sp, color = BrandBlue, fontWeight = FontWeight.Bold)
-                            Text("地点：四川大学信息化大厅校园卡服务窗口", fontSize = 11.sp, color = ScreenMuted)
+                            Text("邮箱：card-admin@wunkei.com", fontSize = 12.sp, color = BrandBlue, fontWeight = FontWeight.Bold)
+                            Text("地点：宇宙警察局", fontSize = 11.sp, color = ScreenMuted)
                         }
                     }
                 }
@@ -1646,6 +1677,9 @@ private fun SearchBox(value: String, onValueChange: (String) -> Unit, placeholde
 @Composable
 private fun LostFoundCard(post: LostFoundPost, onClick: () -> Unit) {
     val tint = if (post.type == "拾卡") SuccessGreen else BrandBlue
+    val maskedName = if (post.personName.isNotBlank()) ValidationHelper.maskPersonName(post.personName) else ""
+    val maskedDoc = if (post.documentNumber.isNotBlank()) ValidationHelper.maskDocumentNumber(post.title, post.documentNumber) else ""
+
     InfoCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             TagPill(post.type + "信息", tint)
@@ -1655,6 +1689,23 @@ private fun LostFoundCard(post: LostFoundPost, onClick: () -> Unit) {
         }
         Spacer(Modifier.height(12.dp))
         Text(post.title, color = ScreenInk, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+
+        if (maskedName.isNotBlank() || maskedDoc.isNotBlank()) {
+            Spacer(Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (maskedName.isNotBlank()) {
+                    Text("失主：$maskedName", color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                }
+                if (maskedDoc.isNotBlank()) {
+                    Text("证件号：$maskedDoc", color = ScreenMuted, fontSize = 13.sp)
+                }
+            }
+        }
+
         Spacer(Modifier.height(7.dp))
         Text("⌖  ${post.campus} · ${post.location}", color = ScreenMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(8.dp))
