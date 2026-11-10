@@ -14,7 +14,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
@@ -58,36 +61,80 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun MainScreen() {
-    var selected by remember { mutableStateOf("发现") }
-    var userPosts by remember { mutableStateOf(emptyList<LostFoundPost>()) }
+private fun MainScreen(viewModel: MainViewModel = viewModel()) {
+    var selected by rememberSaveable { mutableStateOf("发现") }
+    var isRegistering by rememberSaveable { mutableStateOf(false) }
+    val userPosts by viewModel.userPosts.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
+    val matchingPosts by viewModel.matchingPosts.collectAsStateWithLifecycle()
+    val allUsers by viewModel.allUsers.collectAsStateWithLifecycle()
     val pageStateHolder = rememberSaveableStateHolder()
     val backdrop = rememberLayerBackdrop()
     Box(Modifier.fillMaxSize()) {
-        pageStateHolder.SaveableStateProvider(selected) {
-            when (selected) {
-                "发现" -> DiscoverScreen(
-                    backdrop = backdrop,
-                    userPosts = userPosts,
-                    onStartPublish = { selected = "发布" }
-                )
-                "发布" -> PublishScreen(
-                    backdrop = backdrop,
-                    onSubmit = { post ->
-                        userPosts = listOf(post) + userPosts
-                        selected = "发现"
-                    }
-                )
-                else -> ProfileScreen(backdrop = backdrop, userPosts = userPosts)
+        if (isRegistering) {
+            RegisterScreen(
+                backdrop = backdrop,
+                onBack = { isRegistering = false },
+                onCheckAvailability = { studentId, idCard ->
+                    viewModel.checkRegistrationAvailability(studentId, idCard)
+                },
+                onRegisterSuccess = { profile ->
+                    viewModel.saveUser(profile)
+                    isRegistering = false
+                }
+            )
+        } else {
+            pageStateHolder.SaveableStateProvider(selected) {
+                when (selected) {
+                    "发现" -> DiscoverScreen(
+                        backdrop = backdrop,
+                        userPosts = userPosts,
+                        currentUser = currentUser,
+                        onUpdatePostStatus = { id, status -> viewModel.updatePostStatus(id, status) },
+                        onStartPublish = { selected = "发布" }
+                    )
+                    "发布" -> PublishScreen(
+                        backdrop = backdrop,
+                        currentUser = currentUser,
+                        allUsers = allUsers,
+                        onLogin = { studentId, password, callback -> viewModel.login(studentId, password, callback) },
+                        onResetPassword = { studentId, eduroamPass, newPass, callback ->
+                            viewModel.resetPasswordViaEduroam(studentId, eduroamPass, newPass, callback)
+                        },
+                        onNavigateToRegister = { isRegistering = true },
+                        onSaveUser = { profile -> viewModel.saveUser(profile) },
+                        onSubmit = { post ->
+                            viewModel.publishPost(post)
+                            selected = "发现"
+                        }
+                    )
+                    else -> ProfileScreen(
+                        backdrop = backdrop,
+                        userPosts = userPosts,
+                        currentUser = currentUser,
+                        matchingPosts = matchingPosts,
+                        allUsers = allUsers,
+                        onLogin = { studentId, password, callback -> viewModel.login(studentId, password, callback) },
+                        onResetPassword = { studentId, eduroamPass, newPass, callback ->
+                            viewModel.resetPasswordViaEduroam(studentId, eduroamPass, newPass, callback)
+                        },
+                        onNavigateToRegister = { isRegistering = true },
+                        onLogout = { viewModel.logout() },
+                        onSaveUser = { profile ->
+                            viewModel.updateUserContact(profile.studentId, profile.phone, profile.campus)
+                        },
+                        onUpdatePostStatus = { id, status -> viewModel.updatePostStatus(id, status) }
+                    )
+                }
             }
+            FloatingGlassNav(
+                backdrop,
+                selected,
+                onSelect = { selected = it },
+                onCreate = { selected = "发布" },
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 38.dp)
+            )
         }
-        FloatingGlassNav(
-            backdrop,
-            selected,
-            onSelect = { selected = it },
-            onCreate = { selected = "发布" },
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 38.dp)
-        )
     }
 }
 
@@ -152,8 +199,6 @@ private fun FloatingGlassNav(backdrop: com.kyant.backdrop.Backdrop, selected: St
     val density = LocalDensity.current
     val capsuleContentBackdrop = rememberLayerBackdrop()
     val capsuleSurfaceBackdrop = rememberLayerBackdrop()
-    // The pill should refract one stationary copy of the nav content. Including
-    // the enlarged nav copy here samples the same labels twice and creates text ghosts.
     val completeBackdrop = rememberCombinedBackdrop(backdrop, capsuleSurfaceBackdrop, capsuleContentBackdrop)
     BoxWithConstraints(
         modifier = modifier.width(240.dp).height(44.dp),
@@ -169,98 +214,52 @@ private fun FloatingGlassNav(backdrop: com.kyant.backdrop.Backdrop, selected: St
         val capsuleScaleY = 1f + capsulePhase * .03f + pressProgress * .450f
         val capsuleHeightPx = with(density) { 36.dp.toPx() }
 
-        // Keep a stationary copy of the nav surface and labels under the glass pill.
+        // 1. Bottom: nav gray body
         Box(
-            Modifier.matchParentSize().drawWithCache {
-                val window = capsuleWindowPath(
-                    size, tabWidthPx, insetPx, visualIndex, capsuleHeightPx,
-                    capsuleScaleX, capsuleScaleY
-                )
-                onDrawWithContent {
-                    val layerContent = this
-                    clipPath(window, ClipOp.Intersect) { layerContent.drawContent() }
-                }
-            }
-        ) {
-            Box(
-                Modifier.matchParentSize().drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { Capsule() },
-                    effects = {
-                        vibrancy()
-                        blur(1.dp.toPx())
-                        lens(refractionHeight = 3.dp.toPx(), refractionAmount = 6.dp.toPx())
-                    },
-                    highlight = { Highlight.Ambient.copy(alpha = .32f) },
-                    shadow = { Shadow(radius = 10.dp, color = Color.Black.copy(alpha = .14f)) },
-                    exportedBackdrop = capsuleSurfaceBackdrop,
-                    onDrawSurface = { drawRect(Color.White.copy(alpha = .10f)) },
-                    onDrawFront = {
-                        drawRoundRect(
-                            color = Color.White.copy(alpha = .28f),
-                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height / 2f),
-                            style = Stroke(width = .8.dp.toPx())
-                        )
-                    }
-                )
-            )
-            Row(
-                Modifier.fillMaxSize().padding(horizontal = 5.dp).layerBackdrop(capsuleContentBackdrop),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                NavTabContent("⌕", "发现", Modifier.weight(1f), selected = true)
-                NavTabContent("＋", "", Modifier.weight(1f), selected = true)
-                NavTabContent("○", "我的", Modifier.weight(1f), selected = true)
-            }
-        }
-
-        // The nav enlarges everywhere except the area currently covered by the pill.
-        Box(
-            Modifier.matchParentSize()
-                .graphicsLayer {
-                    scaleX = navScaleX
-                    scaleY = navScaleY
-                }
-                .drawWithCache {
-                    val window = capsuleWindowPath(
-                        size, tabWidthPx, insetPx, visualIndex, capsuleHeightPx,
-                        capsuleScaleX, capsuleScaleY, navScaleX, navScaleY
+            Modifier.matchParentSize().drawBackdrop(
+                backdrop = backdrop,
+                shape = { Capsule() },
+                effects = {
+                    vibrancy()
+                    lens(
+                        refractionHeight = 6.6.dp.toPx(),
+                        refractionAmount = 24.dp.toPx(),
+                        chromaticAberration = false
                     )
-                    onDrawWithContent {
-                        val layerContent = this
-                        clipPath(window, ClipOp.Difference) { layerContent.drawContent() }
-                    }
+                },
+                highlight = { Highlight.Ambient.copy(alpha = .20f) },
+                shadow = { Shadow(radius = 10.dp, color = Color.Black.copy(alpha = .08f)) },
+                exportedBackdrop = capsuleSurfaceBackdrop,
+                onDrawSurface = { drawRect(Color(0xFFE5E9EC).copy(alpha = .75f)) },
+                onDrawFront = {
+                    drawRoundRect(
+                        color = Color.Black.copy(alpha = .9f),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height / 2f),
+                        style = Stroke(width = .10.dp.toPx())
+                    )
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            listOf(
+                                Color.White.copy(alpha = .80f),
+                                Color.White.copy(alpha = .18f),
+                                Color.White.copy(alpha = .62f)
+                            )
+                        ),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height / 2f),
+                        style = Stroke(width = .8.dp.toPx())
+                    )
                 }
-        ) {
-            Box(
-                Modifier.matchParentSize().drawBackdrop(
-                    backdrop = backdrop,
-                    shape = { Capsule() },
-                    effects = {
-                        vibrancy()
-                        blur(1.dp.toPx())
-                        lens(refractionHeight = 3.dp.toPx(), refractionAmount = 6.dp.toPx())
-                    },
-                    highlight = { Highlight.Ambient.copy(alpha = .32f) },
-                    shadow = { Shadow(radius = 10.dp, color = Color.Black.copy(alpha = .14f)) },
-                    onDrawSurface = { drawRect(Color.White.copy(alpha = .10f)) },
-                    onDrawFront = {
-                        drawRoundRect(
-                            color = Color.White.copy(alpha = .28f),
-                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height / 2f),
-                            style = Stroke(width = .8.dp.toPx())
-                        )
-                    }
-                )
             )
-            Row(
-                Modifier.fillMaxSize().padding(horizontal = 5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                NavTabContent("⌕", "发现", Modifier.weight(1f), selected = true)
-                NavTabContent("＋", "", Modifier.weight(1f), selected = true)
-                NavTabContent("○", "我的", Modifier.weight(1f), selected = true)
-            }
+        )
+
+        // 2. Middle: the base crisp labels (feeds into capsuleContentBackdrop for the pill to refract!)
+        Row(
+            Modifier.fillMaxSize().padding(horizontal = 5.dp).layerBackdrop(capsuleContentBackdrop),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            NavTabContent("⌕", "发现", Modifier.weight(1f), selected = true)
+            NavTabContent("＋", "", Modifier.weight(1f), selected = true)
+            NavTabContent("○", "我的", Modifier.weight(1f), selected = true)
         }
         Box(
             Modifier
@@ -280,15 +279,14 @@ private fun FloatingGlassNav(backdrop: com.kyant.backdrop.Backdrop, selected: St
                             colorControls(saturation = 1f + .5f * idleEffect)
                             blur(.35f.dp.toPx() * idleEffect)
                         }
-                        if (pressProgress > 0.01f) {
-                            val rHeight = 3.dp.toPx() * pressProgress
-                            val rAmount = 14.dp.toPx() * pressProgress
-                            lens(
-                                refractionHeight = rHeight,
-                                refractionAmount = rAmount,
-                                chromaticAberration = false
-                            )
-                        }
+                        // Continuous optical lens refraction so pill always bends the text underneath!
+                        val rHeight = 3.dp.toPx() * (0.6f + 0.4f * pressProgress)
+                        val rAmount = 14.dp.toPx() * (0.6f + 0.4f * pressProgress)
+                        lens(
+                            refractionHeight = rHeight,
+                            refractionAmount = rAmount,
+                            chromaticAberration = false
+                        )
                     },
                     highlight = { Highlight.Default.copy(alpha = .25f * (1f - pressProgress)) },
                     shadow = { Shadow(radius = 7.dp, color = Color.Black.copy(alpha = .06f + pressProgress * .10f)) },
@@ -296,7 +294,8 @@ private fun FloatingGlassNav(backdrop: com.kyant.backdrop.Backdrop, selected: St
                         scaleX = capsuleScaleX
                         scaleY = capsuleScaleY
                     },
-                    onDrawSurface = { drawRect(Color.White.copy(alpha = .07f * (1f - pressProgress))) }
+                    // When not pressed, capsule has gray tint; when pressed, gray disappears completely so it becomes 100% pure glass!
+                    onDrawSurface = { drawRect(Color(0xFFD4DCE2).copy(alpha = .85f * (1f - pressProgress))) }
                 )
                 .drawWithCache {
                     val rimIntensity = .32f + pressProgress * .68f
@@ -424,10 +423,18 @@ private fun FloatingGlassNav(backdrop: com.kyant.backdrop.Backdrop, selected: St
                 .padding(horizontal = 5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // This top row only receives gestures. The two clipped rendering
-            // layers above already draw the labels; drawing them here as well
-            // puts a sharp copy over the refracted copy while the pill is held.
-            repeat(3) { Box(Modifier.weight(1f).fillMaxHeight()) }
+            // When idle (pressProgress = 0), this top layer renders the crisp text above the capsule!
+            // When pressed (pressProgress -> 1), this top layer fades out completely (alpha -> 0),
+            // so only the bottom layer's text is refracted by the pure glass capsule!
+            val topTextAlpha = (1f - pressProgress * 1.5f).coerceIn(0f, 1f)
+            Row(
+                Modifier.fillMaxSize().graphicsLayer { alpha = topTextAlpha },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                NavTabContent("⌕", "发现", Modifier.weight(1f), selected = true)
+                NavTabContent("＋", "", Modifier.weight(1f), selected = true)
+                NavTabContent("○", "我的", Modifier.weight(1f), selected = true)
+            }
         }
     }
 }
