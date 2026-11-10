@@ -34,10 +34,10 @@ object ValidationHelper {
      * 3. 出生日期需合法且不晚于当前年份
      * 4. 符合 ISO 7064:1983.MOD 11-2 校验码规则
      */
-    fun validateIdCard(idCard: String): String? {
+    fun validateIdCard(idCard: String, isOptional: Boolean = false): String? {
         val clean = idCard.replace(" ", "").trim().uppercase()
         if (clean.isBlank()) {
-            return "请输入完整的18位居民身份证号码"
+            return if (isOptional) null else "请输入完整的18位居民身份证号码"
         }
         if (clean.length != 18) {
             return "身份证号码长度必须为完整的18位（当前输入了 ${clean.length} 位）"

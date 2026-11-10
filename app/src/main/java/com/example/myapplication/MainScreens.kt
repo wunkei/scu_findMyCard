@@ -975,10 +975,10 @@ internal fun RegisterScreen(
 
         InfoCard(Modifier.fillMaxWidth()) {
             FormTextField(
-                label = "居民身份证号 * (必填，完整18位)",
+                label = "居民身份证号 (选填)",
                 value = idCard,
                 onValueChange = { idCard = it; errorMessage = "" },
-                placeholder = "输入18位居民身份证号码"
+                placeholder = "选填，用于拾卡自动精准比对（若填须完整18位）"
             )
 
             FormTextField(
@@ -1054,7 +1054,7 @@ internal fun RegisterScreen(
                     errorMessage = "请填写校园网/eduroam密码以完成身份验证"
                     return@PrimaryActionButton
                 }
-                val idCardErr = ValidationHelper.validateIdCard(idCard)
+                val idCardErr = ValidationHelper.validateIdCard(idCard, isOptional = true)
                 if (idCardErr != null) {
                     errorMessage = idCardErr
                     return@PrimaryActionButton
@@ -1141,22 +1141,21 @@ internal fun AuthDialog(
             ) {
                 if (!isForgotPassword) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("学号密码登录", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ScreenInk)
-                        Text("输入川大学号及应用登录密码", fontSize = 12.sp, color = ScreenMuted)
+                        Text("登录", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ScreenInk)
                     }
 
                     FormTextField(
-                        label = "四川大学学号",
+                        label = "学号",
                         value = studentId,
                         onValueChange = { studentId = it; errorMessage = "" },
                         placeholder = "输入学号"
                     )
 
                     FormTextField(
-                        label = "应用登录密码",
+                        label = "登录密码",
                         value = appPassword,
                         onValueChange = { appPassword = it; errorMessage = "" },
-                        placeholder = "输入应用登录密码",
+                        placeholder = "输入登录密码",
                         visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         trailing = {
                             Text(
@@ -1172,7 +1171,7 @@ internal fun AuthDialog(
 
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         Text(
-                            text = "忘记登录密码？通过校园网找回",
+                            text = "忘记密码？",
                             color = BrandBlue,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Medium,
@@ -1200,7 +1199,7 @@ internal fun AuthDialog(
                                 return@PrimaryActionButton
                             }
                             if (appPassword.isBlank()) {
-                                errorMessage = "请输入应用登录密码"
+                                errorMessage = "请输入登录密码"
                                 return@PrimaryActionButton
                             }
                             val cleanStudentId = studentId.replace(" ", "").trim().removeSuffix("@scu.edu.cn").removeSuffix("@SCU.EDU.CN")
@@ -1208,7 +1207,7 @@ internal fun AuthDialog(
                                 if (success) {
                                     onDismiss()
                                 } else {
-                                    errorMessage = "学号或应用登录密码错误，请重新核对"
+                                    errorMessage = "学号或登录密码错误，请重新核对"
                                 }
                             }
                         }
@@ -1221,7 +1220,7 @@ internal fun AuthDialog(
                         },
                         modifier = Modifier.align(Alignment.CenterHorizontally)
                     ) {
-                        Text("还没有实名认证档案？点击注册", color = BrandBlue, fontSize = 12.sp)
+                        Text("还没有注册账号？点击注册", color = BrandBlue, fontSize = 12.sp)
                     }
                 } else {
                     Row(
@@ -1237,9 +1236,9 @@ internal fun AuthDialog(
                     }
 
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("通过校园网找回登录密码", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ScreenInk)
+                        Text("找回密码", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ScreenInk)
                         Text(
-                            "核验您的川大学号与校园网密码后，即可直接重设应用登录密码",
+                            "核验您的学号与校园网密码后，即可直接重设应用登录密码",
                             fontSize = 12.sp,
                             color = ScreenMuted,
                             lineHeight = 17.sp
@@ -1413,14 +1412,18 @@ internal fun ProfileEditDialog(
                         }
                         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text("居民身份证号", color = ScreenMuted, fontSize = 13.sp)
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                val maskedId = if (currentUser.idCard.length == 18) {
-                                    currentUser.idCard.replaceRange(6, 14, "********")
-                                } else {
-                                    currentUser.idCard
+                            if (currentUser.idCard.isNotBlank()) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    val maskedId = if (currentUser.idCard.length == 18) {
+                                        currentUser.idCard.replaceRange(6, 14, "********")
+                                    } else {
+                                        currentUser.idCard
+                                    }
+                                    Text(maskedId, color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                                    Text("🔒", fontSize = 11.sp)
                                 }
-                                Text(maskedId, color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                Text("🔒", fontSize = 11.sp)
+                            } else {
+                                Text("未绑定 (选填)", color = ScreenMuted, fontSize = 13.sp)
                             }
                         }
                     }
