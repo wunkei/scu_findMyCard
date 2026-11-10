@@ -22,6 +22,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,6 +34,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -41,10 +45,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.FileProvider
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.shapes.Capsule
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -72,6 +78,51 @@ private val SuccessGreen = Color(0xFF278566)
 private val WarmOrange = Color(0xFFDE8958)
 private val CardWhite = Color.White
 
+private fun createCapturedImageUri(context: android.content.Context): Pair<File, android.net.Uri> {
+    val imagesDir = File(context.filesDir, "images").apply { mkdirs() }
+    val file = File(imagesDir, "card_item_${System.currentTimeMillis()}.jpg")
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        file
+    )
+    return Pair(file, uri)
+}
+
+private fun loadBitmapFromUriOrPath(context: android.content.Context, imageUri: String): android.graphics.Bitmap? {
+    if (imageUri.isBlank()) return null
+    return try {
+        val uri = android.net.Uri.parse(imageUri)
+        if (imageUri.startsWith("content://") || imageUri.startsWith("file://")) {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                android.graphics.BitmapFactory.decodeStream(inputStream)
+            }
+        } else {
+            android.graphics.BitmapFactory.decodeFile(imageUri)
+        }
+    } catch (_: Exception) {
+        null
+    }
+}
+
+private fun openMapWithCoordinates(context: android.content.Context, latitude: Double, longitude: Double, label: String) {
+    try {
+        val geoUri = android.net.Uri.parse("geo:$latitude,$longitude?q=$latitude,$longitude(${android.net.Uri.encode(label)})")
+        val mapIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, geoUri)
+        mapIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(mapIntent)
+    } catch (_: Exception) {
+        try {
+            val webUri = android.net.Uri.parse("https://uri.amap.com/marker?position=$longitude,$latitude&name=${android.net.Uri.encode(label)}")
+            val webIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, webUri)
+            webIntent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(webIntent)
+        } catch (_: Exception) {
+            android.widget.Toast.makeText(context, "未能打开地图导航", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+}
+
 private fun getPostDisplayTitle(post: LostFoundPost): String {
     val docName = post.title.substringBefore(" · ").ifBlank { "证件" }
     val status = when {
@@ -95,7 +146,9 @@ private val demoPosts = listOf(
         note = "",
         isDemo = true,
         personName = "张三丰",
-        documentNumber = "2023141440001"
+        documentNumber = "2023141440001",
+        latitude = 30.5563,
+        longitude = 103.9965
     ),
     LostFoundPost(
         type = "拾卡",
@@ -107,7 +160,9 @@ private val demoPosts = listOf(
         note = "",
         isDemo = true,
         personName = "李四",
-        documentNumber = "510107200305011234"
+        documentNumber = "510107200305011234",
+        latitude = 30.6318,
+        longitude = 104.0842
     ),
     LostFoundPost(
         type = "拾卡",
@@ -119,7 +174,9 @@ private val demoPosts = listOf(
         note = "",
         isDemo = true,
         personName = "诸葛孔明",
-        documentNumber = "EE12345678"
+        documentNumber = "EE12345678",
+        latitude = 30.6436,
+        longitude = 104.0624
     )
 )
 
@@ -131,10 +188,12 @@ internal fun DiscoverScreen(
     onUpdatePostStatus: (String, String) -> Unit = { _, _ -> },
     onStartPublish: () -> Unit
 ) {
+    val context = LocalContext.current
     // Search terms can contain card identifiers, so keep them out of saved state.
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by rememberSaveable { mutableStateOf("全部校区") }
     var selectedPost by remember { mutableStateOf<LostFoundPost?>(null) }
+    var viewingPhotoUri by remember { mutableStateOf<String?>(null) }
 
     val posts = userPosts + demoPosts
     val isReturnedTab = selectedCategory == "已归还"
@@ -292,13 +351,87 @@ internal fun DiscoverScreen(
                             color = Color(0xFFFFF7ED),
                             modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
                         ) {
-                            Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(
                                     "✨ 系统识别该卡片证件号与您的实名档案完全匹配！",
                                     color = Color(0xFFEA580C),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
+
+                                if (post.latitude != null && post.longitude != null) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFFEFF6FF),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text(
+                                                "📍 物品精确位置坐标",
+                                                color = BrandBlue,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                "北纬 ${"%.4f".format(post.latitude)}°，东经 ${"%.4f".format(post.longitude)}°",
+                                                color = ScreenInk,
+                                                fontSize = 12.sp
+                                            )
+                                            Button(
+                                                onClick = {
+                                                    openMapWithCoordinates(
+                                                        context = context,
+                                                        latitude = post.latitude,
+                                                        longitude = post.longitude,
+                                                        label = "${post.campus} - ${post.location}"
+                                                    )
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = BrandBlue),
+                                                shape = RoundedCornerShape(6.dp),
+                                                modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+                                            ) {
+                                                Text("🗺️ 跳转地图导航查看位置", color = Color.White, fontSize = 11.sp)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (post.imageUri.isNotBlank()) {
+                                    val bitmap = remember(post.imageUri) { loadBitmapFromUriOrPath(context, post.imageUri) }
+                                    if (bitmap != null) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = Color(0xFFF1F5F9),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                Text(
+                                                    "📷 物品当前位置现场照片",
+                                                    color = ScreenInk,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(130.dp)
+                                                        .clip(RoundedCornerShape(6.dp))
+                                                        .clickable { viewingPhotoUri = post.imageUri },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Image(
+                                                        bitmap = bitmap.asImageBitmap(),
+                                                        contentDescription = "现场照片",
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                }
+                                                Text("点击可放大查看现场照片", color = ScreenMuted, fontSize = 10.sp)
+                                            }
+                                        }
+                                    }
+                                }
+
                                 Button(
                                     onClick = {
                                         onUpdatePostStatus(post.id, "已归还失主")
@@ -313,7 +446,7 @@ internal fun DiscoverScreen(
                             }
                         }
                     } else {
-                        Text("完整号码和姓名仅在实名完全匹配或“我的拾卡”中可管理。", color = ScreenMuted, fontSize = 12.sp)
+                        Text("完整号码、精准经纬度导航与现场照片仅在实名完全匹配后可见。", color = ScreenMuted, fontSize = 12.sp)
                     }
                 }
             },
@@ -322,6 +455,40 @@ internal fun DiscoverScreen(
             },
             containerColor = Color.White
         )
+    }
+
+    viewingPhotoUri?.let { uri ->
+        val bmp = remember(uri) { loadBitmapFromUriOrPath(context, uri) }
+        Dialog(onDismissRequest = { viewingPhotoUri = null }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("物品现场照片", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = ScreenInk)
+                    if (bmp != null) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = "放大照片",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 350.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        )
+                    }
+                    Button(
+                        onClick = { viewingPhotoUri = null },
+                        colors = ButtonDefaults.buttonColors(containerColor = BrandBlue),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("关闭", color = Color.White)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -352,6 +519,12 @@ internal fun PublishScreen(
     var selectedDocumentName by rememberSaveable { mutableStateOf("校园卡") }
     var campus by rememberSaveable { mutableStateOf("") }
     var location by rememberSaveable { mutableStateOf("") }
+    var currentLatitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    var currentLongitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    var capturedImageFile by remember { mutableStateOf<File?>(null) }
+    var capturedImageUriString by rememberSaveable { mutableStateOf("") }
+    var isPendingPublishAfterPhoto by remember { mutableStateOf(false) }
+
     var foundDate by remember { mutableStateOf(formatCurrentDateTime()) }
     var custodyStatus by rememberSaveable { mutableStateOf("由发布者代为保管") }
     var error by rememberSaveable { mutableStateOf("") }
@@ -367,10 +540,16 @@ internal fun PublishScreen(
                     val result = LocationHelper.fetchCurrentLocation(context)
                     if (result != null) {
                         location = result.locationDescription
+                        currentLatitude = result.latitude
+                        currentLongitude = result.longitude
                         error = ""
                         if (campus.isBlank() && result.campus != null) {
                             campus = result.campus
                         }
+                    } else if (currentLatitude == null) {
+                        val coords = LocationHelper.getCampusDefaultCoords(campus.ifBlank { "江安校区" })
+                        currentLatitude = coords.first
+                        currentLongitude = coords.second
                     }
                 } finally {
                     isLocating = false
@@ -394,6 +573,68 @@ internal fun PublishScreen(
         }
     }
     permissionLauncherRef = permissionLauncher
+
+    val doSubmitPost: (String) -> Unit = { imagePath ->
+        val finalLat = currentLatitude ?: LocationHelper.getCampusDefaultCoords(campus.ifBlank { "江安校区" }).first
+        val finalLng = currentLongitude ?: LocationHelper.getCampusDefaultCoords(campus.ifBlank { "江安校区" }).second
+
+        val statusDisplay = if (custodyStatus == "还在原地") "还在原地" else "由发布者代为保管"
+        val safeTitle = "$selectedDocumentName · $statusDisplay"
+        val cleanDocNumber = if (selectedDocumentName == "居民身份证") {
+            documentIdentifier.replace(" ", "").trim().uppercase()
+        } else if (selectedDocumentName == "校园卡") {
+            documentIdentifier.replace(" ", "").trim().removeSuffix("@scu.edu.cn").removeSuffix("@SCU.EDU.CN")
+        } else {
+            documentIdentifier.trim()
+        }
+        onSubmit(
+            LostFoundPost(
+                type = "拾卡",
+                status = statusDisplay,
+                title = safeTitle,
+                campus = campus,
+                location = location,
+                date = foundDate.trim(),
+                note = "",
+                isDemo = false,
+                personName = personName.trim(),
+                documentNumber = cleanDocNumber,
+                latitude = finalLat,
+                longitude = finalLng,
+                imageUri = imagePath
+            )
+        )
+        documentIdentifier = ""
+        personName = ""
+        location = ""
+        error = ""
+        capturedImageUriString = ""
+        capturedImageFile = null
+        foundDate = formatCurrentDateTime()
+        android.widget.Toast.makeText(context, "发布成功！已绑定位置经纬度与现场照片", android.widget.Toast.LENGTH_SHORT).show()
+    }
+
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            val path = capturedImageFile?.absolutePath.orEmpty()
+            capturedImageUriString = path
+            android.widget.Toast.makeText(context, "照片拍摄完成！", android.widget.Toast.LENGTH_SHORT).show()
+            if (isPendingPublishAfterPhoto) {
+                isPendingPublishAfterPhoto = false
+                doSubmitPost(path)
+            }
+        } else {
+            isPendingPublishAfterPhoto = false
+        }
+    }
+
+    val triggerCamera = {
+        val (file, uri) = createCapturedImageUri(context)
+        capturedImageFile = file
+        takePictureLauncher.launch(uri)
+    }
 
     LaunchedEffect(Unit) {
         foundDate = formatCurrentDateTime()
@@ -510,6 +751,14 @@ internal fun PublishScreen(
                 onValueChange = { foundDate = it; error = "" },
                 placeholder = "例如：2026年11月10日 18:30"
             )
+            if (currentLatitude != null && currentLongitude != null) {
+                Text(
+                    "📍 已自动获取经纬度：北纬 ${"%.4f".format(currentLatitude)}°, 东经 ${"%.4f".format(currentLongitude)}°",
+                    color = SuccessGreen,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -523,6 +772,66 @@ internal fun PublishScreen(
                 }
             }
         }
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("物品当前位置照片", fontSize = 13.sp, color = ScreenInk, fontWeight = FontWeight.SemiBold)
+                if (capturedImageUriString.isNotBlank()) {
+                    Text(
+                        "重新拍摄",
+                        color = BrandBlue,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.clickable { triggerCamera() }
+                    )
+                }
+            }
+            if (capturedImageUriString.isNotBlank()) {
+                val bmp = remember(capturedImageUriString) { loadBitmapFromUriOrPath(context, capturedImageUriString) }
+                if (bmp != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFF1F5F9)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            bitmap = bmp.asImageBitmap(),
+                            contentDescription = "物品当前位置照片",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFF8FAFC),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    modifier = Modifier.fillMaxWidth().clickable { triggerCamera() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text("📷", fontSize = 20.sp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("拍摄物品当前放置位置照片", color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            Text("点击提前拍照，或点击下方发布按钮时将自动调用相机", color = ScreenMuted, fontSize = 11.sp)
+                        }
+                        Text("拍照 ›", color = BrandBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+        }
+
         if (error.isNotBlank()) {
             Text(error, color = Color(0xFFB5473C), fontSize = 13.sp)
         }
@@ -533,54 +842,32 @@ internal fun PublishScreen(
             }
             if (documentIdentifier.isBlank() || personName.isBlank() || campus.isBlank() || location.isBlank() || foundDate.isBlank()) {
                 error = "请填写完整号码、姓名、校区、地点和拾获时间。"
-            } else {
-                if (selectedDocumentName == "校园卡") {
-                    val idErr = ValidationHelper.validateStudentId(documentIdentifier)
-                    if (idErr != null) {
-                        error = idErr
-                        return@PrimaryActionButton
-                    }
-                } else if (selectedDocumentName == "居民身份证") {
-                    val idErr = ValidationHelper.validateIdCard(documentIdentifier)
-                    if (idErr != null) {
-                        error = idErr
-                        return@PrimaryActionButton
-                    }
-                }
-                val nameErr = ValidationHelper.validateName(personName)
-                if (nameErr != null) {
-                    error = nameErr
+                return@PrimaryActionButton
+            }
+            if (selectedDocumentName == "校园卡") {
+                val idErr = ValidationHelper.validateStudentId(documentIdentifier)
+                if (idErr != null) {
+                    error = idErr
                     return@PrimaryActionButton
                 }
-
-                val statusDisplay = if (custodyStatus == "还在原地") "还在原地" else "由发布者代为保管"
-                val safeTitle = "$selectedDocumentName · $statusDisplay"
-                val cleanDocNumber = if (selectedDocumentName == "居民身份证") {
-                    documentIdentifier.replace(" ", "").trim().uppercase()
-                } else if (selectedDocumentName == "校园卡") {
-                    documentIdentifier.replace(" ", "").trim().removeSuffix("@scu.edu.cn").removeSuffix("@SCU.EDU.CN")
-                } else {
-                    documentIdentifier.trim()
+            } else if (selectedDocumentName == "居民身份证") {
+                val idErr = ValidationHelper.validateIdCard(documentIdentifier)
+                if (idErr != null) {
+                    error = idErr
+                    return@PrimaryActionButton
                 }
-                onSubmit(
-                    LostFoundPost(
-                        type = "拾卡",
-                        status = statusDisplay,
-                        title = safeTitle,
-                        campus = campus,
-                        location = location,
-                        date = foundDate.trim(),
-                        note = "",
-                        isDemo = false,
-                        personName = personName.trim(),
-                        documentNumber = cleanDocNumber
-                    )
-                )
-                documentIdentifier = ""
-                personName = ""
-                location = ""
-                error = ""
-                foundDate = formatCurrentDateTime()
+            }
+            val nameErr = ValidationHelper.validateName(personName)
+            if (nameErr != null) {
+                error = nameErr
+                return@PrimaryActionButton
+            }
+
+            if (capturedImageUriString.isBlank()) {
+                isPendingPublishAfterPhoto = true
+                triggerCamera()
+            } else {
+                doSubmitPost(capturedImageUriString)
             }
         }
     }
@@ -763,6 +1050,12 @@ internal fun ProfileScreen(
                                             }
                                             Text("${post.campus} · ${post.location}", color = ScreenMuted, fontSize = 12.sp)
                                             Text("拾获时间：${post.date}", color = ScreenMuted, fontSize = 11.sp)
+                                            if (post.latitude != null && post.longitude != null) {
+                                                Text("📍 坐标：北纬 ${"%.4f".format(post.latitude)}°, 东经 ${"%.4f".format(post.longitude)}°", color = ScreenMuted, fontSize = 11.sp)
+                                            }
+                                            if (post.imageUri.isNotBlank()) {
+                                                Text("📷 已附带现场照片", color = BrandBlue, fontSize = 11.sp)
+                                            }
 
                                             if (!post.status.contains("已归还")) {
                                                 Button(

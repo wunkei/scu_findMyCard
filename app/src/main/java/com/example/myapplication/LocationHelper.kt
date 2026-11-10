@@ -39,6 +39,15 @@ object LocationHelper {
         CampusTarget("华西校区", 30.6436, 104.0624, 2500f)
     )
 
+    fun getCampusDefaultCoords(campus: String): Pair<Double, Double> {
+        val target = campusList.firstOrNull { campus.startsWith(it.name.take(2)) }
+        return if (target != null) {
+            Pair(target.latitude, target.longitude)
+        } else {
+            Pair(30.5563, 103.9965)
+        }
+    }
+
     fun hasLocationPermission(context: Context): Boolean {
         val fine = ContextCompat.checkSelfPermission(
             context,

@@ -13,7 +13,7 @@ class PostDatabaseHelper(context: Context) : SQLiteOpenHelper(
 ) {
     companion object {
         const val DATABASE_NAME = "find_my_card.db"
-        const val DATABASE_VERSION = 4
+        const val DATABASE_VERSION = 5
 
         const val TABLE_POSTS = "user_posts"
         const val COLUMN_ID = "id"
@@ -27,6 +27,9 @@ class PostDatabaseHelper(context: Context) : SQLiteOpenHelper(
         const val COLUMN_IS_DEMO = "is_demo"
         const val COLUMN_PERSON_NAME = "person_name"
         const val COLUMN_DOCUMENT_NUMBER = "document_number"
+        const val COLUMN_LATITUDE = "latitude"
+        const val COLUMN_LONGITUDE = "longitude"
+        const val COLUMN_IMAGE_URI = "image_uri"
         const val COLUMN_CREATED_AT = "created_at"
 
         const val TABLE_USERS = "user_profiles"
@@ -55,6 +58,9 @@ class PostDatabaseHelper(context: Context) : SQLiteOpenHelper(
                 $COLUMN_IS_DEMO INTEGER NOT NULL DEFAULT 0,
                 $COLUMN_PERSON_NAME TEXT DEFAULT '',
                 $COLUMN_DOCUMENT_NUMBER TEXT DEFAULT '',
+                $COLUMN_LATITUDE REAL,
+                $COLUMN_LONGITUDE REAL,
+                $COLUMN_IMAGE_URI TEXT DEFAULT '',
                 $COLUMN_CREATED_AT INTEGER NOT NULL
             )
             """.trimIndent()
@@ -95,6 +101,14 @@ class PostDatabaseHelper(context: Context) : SQLiteOpenHelper(
             } catch (_: Exception) {
             }
         }
+        if (oldVersion < 5) {
+            try {
+                db.execSQL("ALTER TABLE $TABLE_POSTS ADD COLUMN $COLUMN_LATITUDE REAL")
+                db.execSQL("ALTER TABLE $TABLE_POSTS ADD COLUMN $COLUMN_LONGITUDE REAL")
+                db.execSQL("ALTER TABLE $TABLE_POSTS ADD COLUMN $COLUMN_IMAGE_URI TEXT DEFAULT ''")
+            } catch (_: Exception) {
+            }
+        }
     }
 
     fun insertPost(post: LostFoundPost): Long {
@@ -111,6 +125,9 @@ class PostDatabaseHelper(context: Context) : SQLiteOpenHelper(
             put(COLUMN_IS_DEMO, if (post.isDemo) 1 else 0)
             put(COLUMN_PERSON_NAME, post.personName)
             put(COLUMN_DOCUMENT_NUMBER, post.documentNumber)
+            if (post.latitude != null) put(COLUMN_LATITUDE, post.latitude) else putNull(COLUMN_LATITUDE)
+            if (post.longitude != null) put(COLUMN_LONGITUDE, post.longitude) else putNull(COLUMN_LONGITUDE)
+            put(COLUMN_IMAGE_URI, post.imageUri)
             put(COLUMN_CREATED_AT, post.createdAt)
         }
         return db.insertWithOnConflict(TABLE_POSTS, null, values, SQLiteDatabase.CONFLICT_REPLACE)
@@ -140,9 +157,16 @@ class PostDatabaseHelper(context: Context) : SQLiteOpenHelper(
             val isDemoIndex = it.getColumnIndexOrThrow(COLUMN_IS_DEMO)
             val personNameIndex = it.getColumnIndexOrThrow(COLUMN_PERSON_NAME)
             val documentNumberIndex = it.getColumnIndexOrThrow(COLUMN_DOCUMENT_NUMBER)
+            val latIndex = it.getColumnIndex(COLUMN_LATITUDE)
+            val lngIndex = it.getColumnIndex(COLUMN_LONGITUDE)
+            val imgIndex = it.getColumnIndex(COLUMN_IMAGE_URI)
             val createdAtIndex = it.getColumnIndexOrThrow(COLUMN_CREATED_AT)
 
             while (it.moveToNext()) {
+                val lat = if (latIndex != -1 && !it.isNull(latIndex)) it.getDouble(latIndex) else null
+                val lng = if (lngIndex != -1 && !it.isNull(lngIndex)) it.getDouble(lngIndex) else null
+                val img = if (imgIndex != -1) it.getString(imgIndex).orEmpty() else ""
+
                 posts.add(
                     LostFoundPost(
                         id = it.getString(idIndex),
@@ -156,6 +180,9 @@ class PostDatabaseHelper(context: Context) : SQLiteOpenHelper(
                         isDemo = it.getInt(isDemoIndex) == 1,
                         personName = it.getString(personNameIndex).orEmpty(),
                         documentNumber = it.getString(documentNumberIndex).orEmpty(),
+                        latitude = lat,
+                        longitude = lng,
+                        imageUri = img,
                         createdAt = it.getLong(createdAtIndex)
                     )
                 )
