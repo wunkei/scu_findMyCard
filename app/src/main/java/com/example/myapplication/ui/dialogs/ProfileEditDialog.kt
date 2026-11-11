@@ -25,14 +25,16 @@ fun ProfileEditDialog(
     onDismiss: () -> Unit,
     onSave: (UserProfile) -> Unit
 ) {
-    val isIdCardBound = currentUser.idCard.isNotBlank()
-    val isPhoneBound = currentUser.phone.isNotBlank()
-
-    var newIdCard by remember { mutableStateOf("") }
-    var newPhone by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf(currentUser.phone) }
     var campus by remember { mutableStateOf(currentUser.campus.ifBlank { "江安校区" }) }
     var showAdminAppealDialog by remember { mutableStateOf(false) }
+    var showBindIdCardDialog by remember { mutableStateOf(false) }
+    var showConfirmBindDialog by remember { mutableStateOf(false) }
+    var inputIdCard by remember { mutableStateOf("") }
+    var bindErrorMessage by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
+
+    val isIdCardBound = currentUser.idCard.isNotBlank()
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -84,19 +86,31 @@ fun ProfileEditDialog(
                                     Text("🔒", fontSize = 11.sp)
                                 }
                             } else {
-                                TagPill("未绑定 · 待填写 ✏️", WarmOrange)
+                                Surface(
+                                    shape = RoundedCornerShape(50),
+                                    color = WarmOrange.copy(alpha = 0.12f),
+                                    modifier = Modifier.clickable {
+                                        inputIdCard = ""
+                                        bindErrorMessage = ""
+                                        showBindIdCardDialog = true
+                                    }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text("待填写 ✏️", color = WarmOrange, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+                                }
                             }
                         }
                         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Text("联系手机号", color = ScreenMuted, fontSize = 13.sp)
-                            if (isPhoneBound) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    val maskedPhone = ValidationHelper.maskPhone(currentUser.phone)
-                                    Text(maskedPhone, color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                    Text("🔒", fontSize = 11.sp)
-                                }
+                            if (currentUser.phone.isNotBlank()) {
+                                Text(currentUser.phone, color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                             } else {
-                                TagPill("未绑定 · 待填写 ✏️", WarmOrange)
+                                Text("未设置", color = ScreenMuted, fontSize = 12.sp)
                             }
                         }
                     }
@@ -131,56 +145,12 @@ fun ProfileEditDialog(
                     }
                 }
 
-                if (!isIdCardBound) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FormTextField(
-                            label = "居民身份证号 (补充绑定)",
-                            value = newIdCard,
-                            onValueChange = { newIdCard = it; errorMessage = "" },
-                            placeholder = "请输入18位居民身份证号码"
-                        )
-                        Text(
-                            "⚠️ 身份证号为防冒领核心实名凭据，一旦绑定即永久锁定，无法自行修改。",
-                            color = WarmOrange,
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp
-                        )
-                    }
-                }
-
-                if (!isPhoneBound) {
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FormTextField(
-                            label = "联系手机 (补充绑定)",
-                            value = newPhone,
-                            onValueChange = { newPhone = it; errorMessage = "" },
-                            placeholder = "请输入11位中国大陆手机号码"
-                        )
-                        Text(
-                            "⚠️ 手机号一旦绑定即作为实名联系凭据，保存后将永久锁定，无法自行修改。",
-                            color = WarmOrange,
-                            fontSize = 11.sp,
-                            lineHeight = 15.sp
-                        )
-                    }
-                }
-
-                if (isIdCardBound && isPhoneBound) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFFF0FDF4),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("✅", fontSize = 14.sp)
-                            Text(
-                                "您的所有核心实名凭据与手机号均已完成绑定并安全锁定。",
-                                color = SuccessGreen,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-                }
+                FormTextField(
+                    label = "联系手机 (可随时修改)",
+                    value = phone,
+                    onValueChange = { phone = it; errorMessage = "" },
+                    placeholder = "输入11位手机号码方便拾获同学联系"
+                )
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("常驻校区", fontSize = 13.sp, color = ScreenInk, fontWeight = FontWeight.SemiBold)
@@ -210,36 +180,14 @@ fun ProfileEditDialog(
                     }
                     Button(
                         onClick = {
-                            var finalIdCard = currentUser.idCard
-                            var finalPhone = currentUser.phone
-
-                            if (!isIdCardBound && newIdCard.isNotBlank()) {
-                                val cleanId = newIdCard.replace(" ", "").trim().uppercase()
-                                val idErr = ValidationHelper.validateIdCard(cleanId, isOptional = false)
-                                if (idErr != null) {
-                                    errorMessage = idErr
-                                    return@Button
-                                }
-                                if (allUsers.any { it.studentId != currentUser.studentId && it.idCard.equals(cleanId, ignoreCase = true) }) {
-                                    errorMessage = "该身份证号已绑定其他学号档案（每张身份证仅限绑定一次）。"
-                                    return@Button
-                                }
-                                finalIdCard = cleanId
+                            val phoneErr = ValidationHelper.validatePhone(phone, isOptional = true)
+                            if (phoneErr != null) {
+                                errorMessage = phoneErr
+                                return@Button
                             }
-
-                            if (!isPhoneBound && newPhone.isNotBlank()) {
-                                val cleanPhone = newPhone.replace(" ", "").trim()
-                                val phoneErr = ValidationHelper.validatePhone(cleanPhone, isOptional = false)
-                                if (phoneErr != null) {
-                                    errorMessage = phoneErr
-                                    return@Button
-                                }
-                                finalPhone = cleanPhone
-                            }
-
+                            val cleanPhone = phone.replace(" ", "").trim()
                             val updated = currentUser.copy(
-                                idCard = finalIdCard,
-                                phone = finalPhone,
+                                phone = cleanPhone,
                                 campus = campus
                             )
                             onSave(updated)
@@ -254,6 +202,133 @@ fun ProfileEditDialog(
                 }
             }
         }
+    }
+
+    if (showBindIdCardDialog) {
+        AlertDialog(
+            onDismissRequest = { showBindIdCardDialog = false },
+            title = {
+                Text("补充绑定居民身份证", color = ScreenInk, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "身份证号码用于失卡或拾卡时的精准智能关联碰撞。",
+                        color = ScreenMuted,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
+                    )
+                    FormTextField(
+                        label = "居民身份证号",
+                        value = inputIdCard,
+                        onValueChange = {
+                            inputIdCard = it
+                            bindErrorMessage = ""
+                        },
+                        placeholder = "请输入18位居民身份证号码"
+                    )
+                    if (bindErrorMessage.isNotBlank()) {
+                        Text(bindErrorMessage, color = Color(0xFFD32F2F), fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val cleanId = inputIdCard.replace(" ", "").trim().uppercase()
+                        val idErr = ValidationHelper.validateIdCard(cleanId, isOptional = false)
+                        if (idErr != null) {
+                            bindErrorMessage = idErr
+                            return@Button
+                        }
+                        if (allUsers.any { it.studentId != currentUser.studentId && it.idCard.equals(cleanId, ignoreCase = true) }) {
+                            bindErrorMessage = "该身份证号已绑定其他学号档案（每张身份证仅限绑定一次）。"
+                            return@Button
+                        }
+                        showBindIdCardDialog = false
+                        showConfirmBindDialog = true
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandBlue),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("下一步", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBindIdCardDialog = false }) {
+                    Text("取消", color = ScreenMuted)
+                }
+            },
+            containerColor = Color.White
+        )
+    }
+
+    if (showConfirmBindDialog) {
+        val cleanId = inputIdCard.replace(" ", "").trim().uppercase()
+
+        AlertDialog(
+            onDismissRequest = { showConfirmBindDialog = false },
+            title = {
+                Text("⚠️ 确认绑定身份证号", color = ScreenInk, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("您输入的身份证号码为：", color = ScreenInk, fontSize = 13.sp)
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFF3F7FA),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            cleanId,
+                            color = BrandBlue,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFFFF7ED),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "⚠️ 关键提醒：身份证号一旦绑定，将永久与您的学号（${currentUser.studentId}）锁定，后续无法自行修改。如需变更须联系管理员提交证明材料。",
+                            color = Color(0xFFEA580C),
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showConfirmBindDialog = false
+                        val updated = currentUser.copy(
+                            idCard = cleanId,
+                            phone = phone.replace(" ", "").trim(),
+                            campus = campus
+                        )
+                        onSave(updated)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = BrandBlue),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("确认永久绑定", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showConfirmBindDialog = false
+                    showBindIdCardDialog = true
+                }) {
+                    Text("返回修改", color = ScreenMuted)
+                }
+            },
+            containerColor = Color.White
+        )
     }
 
     if (showAdminAppealDialog) {
