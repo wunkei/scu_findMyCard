@@ -54,7 +54,7 @@ fun PublishScreen(
     var documentIdentifier by remember { mutableStateOf("") }
     var personName by remember { mutableStateOf("") }
     var selectedDocumentName by rememberSaveable { mutableStateOf("校园卡") }
-    var campus by rememberSaveable { mutableStateOf("") }
+    var campus by rememberSaveable { mutableStateOf(currentUser?.campus?.ifBlank { "江安校区" } ?: "江安校区") }
     var location by rememberSaveable { mutableStateOf("") }
     var currentLatitude by rememberSaveable { mutableStateOf<Double?>(null) }
     var currentLongitude by rememberSaveable { mutableStateOf<Double?>(null) }
@@ -80,7 +80,7 @@ fun PublishScreen(
                         currentLatitude = result.latitude
                         currentLongitude = result.longitude
                         error = ""
-                        if (campus.isBlank() && result.campus != null) {
+                        if (result.campus != null) {
                             campus = result.campus
                         }
                     } else if (currentLatitude == null) {
@@ -124,13 +124,13 @@ fun PublishScreen(
         }
         val finalLocation = if (location.isNotBlank()) {
             location.trim()
-        } else if (custodyStatus == "由发布者代为保管") {
+        } else if (custodyStatus != "还在原地") {
             "由发布者代为保管"
         } else {
             "具体地点未填写"
         }
 
-        val finalImagePath = if (custodyStatus == "由发布者代为保管") "" else imagePath
+        val finalImagePath = if (custodyStatus != "还在原地") "" else imagePath
 
         onSubmit(
             LostFoundPost(
@@ -157,6 +157,7 @@ fun PublishScreen(
         capturedImageFile = null
         foundDate = formatCurrentDateTime()
         custodyStatus = "还在原地"
+        campus = currentUser?.campus?.ifBlank { "江安校区" } ?: "江安校区"
         Toast.makeText(context, "发布成功！已上传经纬度位置${if (finalImagePath.isNotBlank()) "与现场照片" else ""}", Toast.LENGTH_SHORT).show()
     }
 
@@ -230,17 +231,18 @@ fun PublishScreen(
         }
 
         InfoCard(Modifier.fillMaxWidth()) {
-            FormTextField(
-                label = selectedDocument.identifierLabel,
-                value = documentIdentifier,
-                onValueChange = { documentIdentifier = it; error = "" },
-                placeholder = selectedDocument.identifierPlaceholder
-            )
+
             FormTextField(
                 label = selectedDocument.personNameLabel,
                 value = personName,
                 onValueChange = { personName = it; error = "" },
                 placeholder = selectedDocument.personNamePlaceholder
+            )
+            FormTextField(
+                label = selectedDocument.identifierLabel,
+                value = documentIdentifier,
+                onValueChange = { documentIdentifier = it; error = "" },
+                placeholder = selectedDocument.identifierPlaceholder
             )
         }
 
@@ -251,27 +253,12 @@ fun PublishScreen(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    listOf("还在原地", "由发布者代为保管").forEach { status ->
+                    listOf("还在原地", "由我代为保管").forEach { status ->
                         SelectChip(status, selected = custodyStatus == status) {
                             custodyStatus = status
                             error = ""
                         }
                     }
-                }
-                if (custodyStatus == "由发布者代为保管") {
-                    Text(
-                        "💡 您已选择代为保管，已免除具体地点与现场照片录入，系统仍将自动记录当前经纬度",
-                        color = BrandBlue,
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp
-                    )
-                } else {
-                    Text(
-                        "📌 卡片留在原地时，请拍摄现场放置照片并填写具体地点，方便失主前往寻找",
-                        color = ScreenMuted,
-                        fontSize = 11.sp,
-                        lineHeight = 15.sp
-                    )
                 }
             }
         }
@@ -333,7 +320,7 @@ fun PublishScreen(
             )
             if (currentLatitude != null && currentLongitude != null) {
                 Text(
-                    "📍 已自动获取经纬度：北纬 ${"%.4f".format(currentLatitude)}°, 东经 ${"%.4f".format(currentLongitude)}°",
+                    "北纬 ${"%.4f".format(currentLatitude)}°, 东经 ${"%.4f".format(currentLongitude)}°",
                     color = SuccessGreen,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium
@@ -349,7 +336,7 @@ fun PublishScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "物品当前位置照片（必拍）",
+                        "物品当前位置照片",
                         fontSize = 13.sp,
                         color = ScreenInk,
                         fontWeight = FontWeight.SemiBold
@@ -419,7 +406,7 @@ fun PublishScreen(
         if (error.isNotBlank()) {
             Text(error, color = Color(0xFFB5473C), fontSize = 13.sp)
         }
-        PrimaryActionButton("发布拾获信息") {
+        PrimaryActionButton("发布") {
             if (currentUser == null) {
                 showAuthDialog = true
                 return@PrimaryActionButton
@@ -458,7 +445,7 @@ fun PublishScreen(
                 return@PrimaryActionButton
             }
 
-            val finalImagePath = if (custodyStatus == "由发布者代为保管") "" else capturedImageUriString
+            val finalImagePath = if (custodyStatus != "还在原地") "" else capturedImageUriString
             doSubmitPost(finalImagePath)
         }
     }
