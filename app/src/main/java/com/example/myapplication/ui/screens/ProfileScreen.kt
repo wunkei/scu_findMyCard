@@ -136,6 +136,7 @@ fun ProfileScreen(
     if (showProfileEditDialog && currentUser != null) {
         ProfileEditDialog(
             currentUser = currentUser,
+            allUsers = allUsers,
             onDismiss = { showProfileEditDialog = false },
             onSave = onSaveUser
         )

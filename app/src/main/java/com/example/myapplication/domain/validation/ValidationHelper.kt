@@ -110,6 +110,17 @@ object ValidationHelper {
     }
 
     /**
+     * 手机号码脱敏展示（例如 138****1234）
+     */
+    fun maskPhone(phone: String): String {
+        val clean = phone.replace(" ", "").trim()
+        if (clean.length == 11) {
+            return "${clean.take(3)}****${clean.takeLast(4)}"
+        }
+        return clean
+    }
+
+    /**
      * 姓名脱敏展示
      */
     fun maskPersonName(name: String): String {

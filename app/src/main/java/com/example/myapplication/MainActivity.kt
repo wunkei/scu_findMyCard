@@ -94,7 +94,7 @@ private fun MainScreen(viewModel: MainViewModel = viewModel()) {
                         onNavigateToRegister = { isRegistering = true },
                         onLogout = { viewModel.logout() },
                         onSaveUser = { profile ->
-                            viewModel.updateUserContact(profile.studentId, profile.phone, profile.campus)
+                            viewModel.saveUser(profile)
                         },
                         onUpdatePostStatus = { id, status -> viewModel.updatePostStatus(id, status) }
                     )
