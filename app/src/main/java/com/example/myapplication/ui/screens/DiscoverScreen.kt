@@ -164,11 +164,6 @@ fun DiscoverScreen(
                 val maskedName = if (post.personName.isNotBlank()) ValidationHelper.maskPersonName(post.personName) else ""
                 val maskedDoc = if (post.documentNumber.isNotBlank()) ValidationHelper.maskDocumentNumber(post.title, post.documentNumber) else ""
                 Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Text(
-                        "${post.type}信息 · ${post.status}",
-                        color = if (post.status.contains("已归还")) SuccessGreen else BrandBlue,
-                        fontWeight = FontWeight.SemiBold
-                    )
                     if (maskedName.isNotBlank() || maskedDoc.isNotBlank()) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
