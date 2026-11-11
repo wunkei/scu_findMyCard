@@ -130,6 +130,8 @@ fun PublishScreen(
             "具体地点未填写"
         }
 
+        val finalImagePath = if (custodyStatus == "由发布者代为保管") "" else imagePath
+
         onSubmit(
             LostFoundPost(
                 type = "拾卡",
@@ -144,7 +146,7 @@ fun PublishScreen(
                 documentNumber = cleanDocNumber,
                 latitude = finalLat,
                 longitude = finalLng,
-                imageUri = imagePath
+                imageUri = finalImagePath
             )
         )
         documentIdentifier = ""
@@ -155,7 +157,7 @@ fun PublishScreen(
         capturedImageFile = null
         foundDate = formatCurrentDateTime()
         custodyStatus = "还在原地"
-        Toast.makeText(context, "发布成功！已上传经纬度位置${if (imagePath.isNotBlank()) "与现场照片" else ""}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "发布成功！已上传经纬度位置${if (finalImagePath.isNotBlank()) "与现场照片" else ""}", Toast.LENGTH_SHORT).show()
     }
 
     val takePictureLauncher = rememberLauncherForActivityResult(
@@ -258,14 +260,14 @@ fun PublishScreen(
                 }
                 if (custodyStatus == "由发布者代为保管") {
                     Text(
-                        "💡 您已选择代为保管，可跳过拍照与具体地点要求，系统仍将自动记录当前经纬度",
+                        "💡 您已选择代为保管，已免除具体地点与现场照片录入，系统仍将自动记录当前经纬度",
                         color = BrandBlue,
                         fontSize = 11.sp,
                         lineHeight = 15.sp
                     )
                 } else {
                     Text(
-                        "📌 卡片留在原地时，请拍摄现场照片并填写具体地点，方便失主前往寻找",
+                        "📌 卡片留在原地时，请拍摄现场放置照片并填写具体地点，方便失主前往寻找",
                         color = ScreenMuted,
                         fontSize = 11.sp,
                         lineHeight = 15.sp
@@ -289,38 +291,40 @@ fun PublishScreen(
                     }
                 }
             }
-            FormTextField(
-                label = if (custodyStatus == "还在原地") "具体地点" else "具体地点（代为保管可选）",
-                value = location,
-                onValueChange = { location = it; error = "" },
-                placeholder = if (isLocating) "正在定位当前位置…" else if (custodyStatus == "由发布者代为保管") "代为保管可不填，已自动获取经纬度" else "例如：第一教学楼附近",
-                trailing = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFFEAF3FB))
-                            .clickable(enabled = !isLocating) {
-                                fetchLocationAction(true)
-                            }
-                            .padding(horizontal = 8.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = "⌖",
-                            color = BrandBlue,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = if (isLocating) "定位中…" else "自动定位",
-                            color = BrandBlue,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+            if (custodyStatus == "还在原地") {
+                FormTextField(
+                    label = "具体地点",
+                    value = location,
+                    onValueChange = { location = it; error = "" },
+                    placeholder = if (isLocating) "正在定位当前位置…" else "例如：第一教学楼附近",
+                    trailing = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFEAF3FB))
+                                .clickable(enabled = !isLocating) {
+                                    fetchLocationAction(true)
+                                }
+                                .padding(horizontal = 8.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "⌖",
+                                color = BrandBlue,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (isLocating) "定位中…" else "自动定位",
+                                color = BrandBlue,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
-                }
-            )
+                )
+            }
             FormTextField(
                 label = "拾获时间",
                 value = foundDate,
@@ -337,74 +341,76 @@ fun PublishScreen(
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    if (custodyStatus == "还在原地") "物品当前位置照片（必拍）" else "物品照片（代为保管可选）",
-                    fontSize = 13.sp,
-                    color = ScreenInk,
-                    fontWeight = FontWeight.SemiBold
-                )
-                if (capturedImageUriString.isNotBlank()) {
+        if (custodyStatus == "还在原地") {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        "重新拍摄",
-                        color = BrandBlue,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable { triggerCamera() }
+                        "物品当前位置照片（必拍）",
+                        fontSize = 13.sp,
+                        color = ScreenInk,
+                        fontWeight = FontWeight.SemiBold
                     )
-                }
-            }
-            if (capturedImageUriString.isNotBlank()) {
-                val bmp = remember(capturedImageUriString) { loadBitmapFromUriOrPath(context, capturedImageUriString) }
-                if (bmp != null) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(180.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFF1F5F9)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Image(
-                            bitmap = bmp.asImageBitmap(),
-                            contentDescription = "物品当前位置照片",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
+                    if (capturedImageUriString.isNotBlank()) {
+                        Text(
+                            "重新拍摄",
+                            color = BrandBlue,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable { triggerCamera() }
                         )
                     }
                 }
-            } else {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFFF8FAFC),
-                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                    modifier = Modifier.fillMaxWidth().clickable { triggerCamera() }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text("📷", fontSize = 20.sp)
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                if (custodyStatus == "还在原地") "拍摄物品当前放置位置照片" else "拍摄物品照片（可选）",
-                                color = ScreenInk,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Text(
-                                if (custodyStatus == "还在原地") "卡片留在原地，点击发布时将自动调用相机拍照" else "已选择代为保管，无需强制拍照，点击发布将直接跳过拍照",
-                                color = ScreenMuted,
-                                fontSize = 11.sp
+                if (capturedImageUriString.isNotBlank()) {
+                    val bmp = remember(capturedImageUriString) { loadBitmapFromUriOrPath(context, capturedImageUriString) }
+                    if (bmp != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(180.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color(0xFFF1F5F9)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                bitmap = bmp.asImageBitmap(),
+                                contentDescription = "物品当前位置照片",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
                             )
                         }
-                        Text("拍照 ›", color = BrandBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                } else {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFF8FAFC),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        modifier = Modifier.fillMaxWidth().clickable { triggerCamera() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text("📷", fontSize = 20.sp)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "拍摄物品当前放置位置照片",
+                                    color = ScreenInk,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    "卡片留在原地，点击发布时将自动调用相机拍照",
+                                    color = ScreenMuted,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Text("拍照 ›", color = BrandBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
             }
@@ -422,9 +428,16 @@ fun PublishScreen(
                 error = "请填写完整号码、姓名、校区和拾获时间。"
                 return@PrimaryActionButton
             }
-            if (custodyStatus == "还在原地" && location.isBlank()) {
-                error = "卡片还在原地，请填写具体地点方便失主寻找。"
-                return@PrimaryActionButton
+            if (custodyStatus == "还在原地") {
+                if (location.isBlank()) {
+                    error = "卡片还在原地，请填写具体地点方便失主寻找。"
+                    return@PrimaryActionButton
+                }
+                if (capturedImageUriString.isBlank()) {
+                    isPendingPublishAfterPhoto = true
+                    triggerCamera()
+                    return@PrimaryActionButton
+                }
             }
             if (selectedDocumentName == "校园卡") {
                 val idErr = ValidationHelper.validateStudentId(documentIdentifier)
@@ -445,12 +458,8 @@ fun PublishScreen(
                 return@PrimaryActionButton
             }
 
-            if (custodyStatus == "还在原地" && capturedImageUriString.isBlank()) {
-                isPendingPublishAfterPhoto = true
-                triggerCamera()
-            } else {
-                doSubmitPost(capturedImageUriString)
-            }
+            val finalImagePath = if (custodyStatus == "由发布者代为保管") "" else capturedImageUriString
+            doSubmitPost(finalImagePath)
         }
     }
 
