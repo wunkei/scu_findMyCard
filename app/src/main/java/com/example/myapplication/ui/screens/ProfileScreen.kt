@@ -79,57 +79,14 @@ fun ProfileScreen(
                     modifier = Modifier
                         .weight(1f)
                         .clickable {
-                            if (currentUser == null) showAuthDialog = true
+                            if (currentUser == null) showAuthDialog = true else dialogTarget = "我的拾卡"
                         }
                 )
             }
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("我的记录", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = ScreenInk)
-            RecordRow(
-                symbol = "✓",
-                title = "我的拾卡",
-                subtitle = if (currentUser == null) "登录后查看我登记的拾获信息" else "查看我登记的拾获信息",
-                count = if (currentUser == null) 0 else userPosts.count { it.type == "拾卡" },
-                tint = SuccessGreen,
-                onClick = {
-                    if (currentUser == null) {
-                        showAuthDialog = true
-                    } else {
-                        dialogTarget = "我的拾卡"
-                    }
-                }
-            )
-            RecordRow(
-                symbol = "↔",
-                title = "智能关联认领",
-                subtitle = when {
-                    currentUser == null -> "登录后自动比对失卡与认领进度"
-                    matchingPosts.isNotEmpty() -> "🎉 发现 ${matchingPosts.size} 张可能属于您的卡片！"
-                    else -> "暂无关联卡片，发布后将自动比对"
-                },
-                count = if (currentUser == null) 0 else matchingPosts.size,
-                tint = if (matchingPosts.isNotEmpty()) WarmOrange else BrandBlue,
-                onClick = {
-                    if (currentUser == null) {
-                        showAuthDialog = true
-                    } else {
-                        dialogTarget = "我的认领"
-                    }
-                }
-            )
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("其他", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = ScreenInk)
-            SettingRow("个人资料") {
-                if (currentUser == null) {
-                    showAuthDialog = true
-                } else {
-                    showProfileEditDialog = true
-                }
-            }
+            Text("设置与支持", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = ScreenInk)
             SettingRow("隐私与安全") { dialogTarget = "隐私与安全" }
             SettingRow("关于川大寻卡") { dialogTarget = "关于川大寻卡" }
             if (currentUser != null) {
