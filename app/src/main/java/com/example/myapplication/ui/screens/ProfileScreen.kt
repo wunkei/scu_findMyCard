@@ -39,7 +39,8 @@ fun ProfileScreen(
     var showAuthDialog by remember { mutableStateOf(false) }
     var showProfileEditDialog by remember { mutableStateOf(false) }
     var dialogTarget by remember { mutableStateOf<String?>(null) }
-    val openPosts = userPosts.filter { it.status !in setOf("已归还", "已归还失主", "已解决") }
+    val unclaimedPosts = userPosts.filter { !it.status.contains("已归还") && !it.status.contains("认领") }
+    val claimedPosts = userPosts.filter { it.status.contains("已归还") || it.status.contains("认领") }
 
     PageShell(backdrop) {
         ProfileCard(
@@ -61,29 +62,48 @@ fun ProfileScreen(
                     modifier = Modifier
                         .weight(1f)
                         .clickable {
-                            if (currentUser == null) showAuthDialog = true else dialogTarget = "我的拾卡"
+                            if (currentUser == null) showAuthDialog = true else dialogTarget = "我的发布"
                         }
                 )
                 StatValue(
-                    label = "智能关联",
-                    value = if (currentUser == null) "--" else matchingPosts.size.toString(),
+                    label = "未认领",
+                    value = if (currentUser == null) "--" else unclaimedPosts.size.toString(),
                     modifier = Modifier
                         .weight(1f)
                         .clickable {
-                            if (currentUser == null) showAuthDialog = true else dialogTarget = "我的认领"
+                            if (currentUser == null) showAuthDialog = true else dialogTarget = "未认领"
                         }
                 )
                 StatValue(
-                    label = "处理中",
-                    value = if (currentUser == null) "--" else openPosts.size.toString(),
+                    label = "已认领",
+                    value = if (currentUser == null) "--" else claimedPosts.size.toString(),
                     modifier = Modifier
                         .weight(1f)
                         .clickable {
-                            if (currentUser == null) showAuthDialog = true else dialogTarget = "我的拾卡"
+                            if (currentUser == null) showAuthDialog = true else dialogTarget = "已认领"
                         }
                 )
             }
         }
+
+        RecordRow(
+            symbol = "↔",
+            title = "智能关联",
+            subtitle = when {
+                currentUser == null -> "登录后自动比对失卡与认领进度"
+                matchingPosts.isNotEmpty() -> "🎉 发现 ${matchingPosts.size} 张可能属于您的卡片！"
+                else -> "系统实时为您比对新发布的拾卡信息"
+            },
+            count = if (currentUser == null) 0 else matchingPosts.size,
+            tint = if (matchingPosts.isNotEmpty()) WarmOrange else BrandBlue,
+            onClick = {
+                if (currentUser == null) {
+                    showAuthDialog = true
+                } else {
+                    dialogTarget = "我的认领"
+                }
+            }
+        )
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("设置与支持", fontSize = 19.sp, fontWeight = FontWeight.Bold, color = ScreenInk)
@@ -114,14 +134,30 @@ fun ProfileScreen(
 
     dialogTarget?.let { target ->
         when (target) {
-            "我的拾卡" -> {
-                val myPosts = userPosts.filter { it.type == "拾卡" }
+            "我的发布", "未认领", "已认领", "我的拾卡" -> {
+                val dialogTitle = when (target) {
+                    "未认领" -> "未认领卡片"
+                    "已认领" -> "已认领卡片"
+                    else -> "我的发布记录"
+                }
+                val myPosts = when (target) {
+                    "未认领" -> userPosts.filter { !it.status.contains("已归还") && !it.status.contains("认领") }
+                    "已认领" -> userPosts.filter { it.status.contains("已归还") || it.status.contains("认领") }
+                    else -> userPosts
+                }
                 AlertDialog(
                     onDismissRequest = { dialogTarget = null },
-                    title = { Text("我的拾卡记录", color = ScreenInk, fontWeight = FontWeight.Bold) },
+                    title = { Text(dialogTitle, color = ScreenInk, fontWeight = FontWeight.Bold) },
                     text = {
                         if (myPosts.isEmpty()) {
-                            Text("目前还没有拾卡记录。您可以在“发布”页面登记拾获的卡片。", color = ScreenMuted)
+                            Text(
+                                when (target) {
+                                    "未认领" -> "暂无未认领卡片记录。"
+                                    "已认领" -> "暂无已认领卡片记录。"
+                                    else -> "目前还没有发布记录。您可以在“发布”页面登记拾获的卡片。"
+                                },
+                                color = ScreenMuted
+                            )
                         } else {
                             Column(
                                 modifier = Modifier.verticalScroll(rememberScrollState()),
