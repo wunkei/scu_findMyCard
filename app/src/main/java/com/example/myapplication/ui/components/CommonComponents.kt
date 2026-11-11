@@ -94,23 +94,30 @@ fun SearchBox(value: String, onValueChange: (String) -> Unit, placeholder: Strin
 
 @Composable
 fun LostFoundCard(post: LostFoundPost, onClick: () -> Unit) {
-    val tint = if (post.type == "拾卡") SuccessGreen else BrandBlue
+    val docName = post.title.substringBefore(" · ").ifBlank { "证件" }
+    val statusDisplay = when {
+        post.status.contains("已归还") || post.status.contains("认领") -> "已归还失主"
+        post.status == "还在原地" -> "还在原地"
+        else -> post.status.ifBlank { "由发布者代为保管" }
+    }
+    val statusTint = when {
+        statusDisplay.contains("归还") || statusDisplay.contains("认领") -> Color(0xFF7C3AED)
+        statusDisplay == "还在原地" -> SuccessGreen
+        else -> WarmOrange
+    }
     val maskedName = if (post.personName.isNotBlank()) ValidationHelper.maskPersonName(post.personName) else ""
     val maskedDoc = if (post.documentNumber.isNotBlank()) ValidationHelper.maskDocumentNumber(post.title, post.documentNumber) else ""
-    val displayTitle = getPostDisplayTitle(post)
 
     InfoCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-            TagPill(post.type + "信息", tint)
-            TagPill(post.status, if (post.status == "待认领" || post.status == "由发布者代为保管") WarmOrange else tint.copy(alpha = .76f))
+            TagPill(docName, BrandBlue)
+            TagPill(statusDisplay, statusTint)
             Spacer(Modifier.weight(1f))
             Text(if (post.isDemo) "演示" else "刚发布", color = ScreenMuted, fontSize = 11.sp)
         }
-        Spacer(Modifier.height(12.dp))
-        Text(displayTitle, color = ScreenInk, fontSize = 16.sp, fontWeight = FontWeight.Bold)
 
         if (maskedName.isNotBlank() || maskedDoc.isNotBlank()) {
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(10.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -125,7 +132,7 @@ fun LostFoundCard(post: LostFoundPost, onClick: () -> Unit) {
             }
         }
 
-        Spacer(Modifier.height(7.dp))
+        Spacer(Modifier.height(8.dp))
         Text("⌖  ${post.campus} · ${post.location}", color = ScreenMuted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {

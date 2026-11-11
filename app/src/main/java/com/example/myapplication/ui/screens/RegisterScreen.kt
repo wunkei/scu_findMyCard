@@ -62,13 +62,7 @@ fun RegisterScreen(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("实名注册档案", fontSize = 24.sp, lineHeight = 29.sp, fontWeight = FontWeight.Bold, color = ScreenInk)
-            Text(
-                "通过 eduroam 验证学号真实性，卡片拾获时系统将自动匹配提醒",
-                fontSize = 12.sp,
-                color = ScreenMuted,
-                lineHeight = 17.sp
-            )
+            Text("注册", fontSize = 24.sp, lineHeight = 29.sp, fontWeight = FontWeight.Bold, color = ScreenInk)
         }
 
         InfoCard(Modifier.fillMaxWidth()) {
@@ -80,17 +74,17 @@ fun RegisterScreen(
             )
 
             FormTextField(
-                label = "四川大学学号 * (必填)",
+                label = "学号 * (必填)",
                 value = studentId,
                 onValueChange = { studentId = it; errorMessage = "" },
-                placeholder = "例如：2022141440000"
+                placeholder = "例如：2024141460000"
             )
 
             FormTextField(
-                label = "校园网/统一身份密码 * (仅单次官方核验)",
+                label = "校园网密码 * (仅单次核验)",
                 value = eduroamPassword,
                 onValueChange = { eduroamPassword = it; errorMessage = "" },
-                placeholder = "输入四川大学校园网密码",
+                placeholder = "输入校园网密码",
                 visualTransformation = if (isEduroamPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                 trailing = {
                     Text(
@@ -105,7 +99,7 @@ fun RegisterScreen(
             )
 
             FormTextField(
-                label = "设置应用登录密码 (选填)",
+                label = "设置登录密码 (选填)",
                 value = appPassword,
                 onValueChange = { appPassword = it; errorMessage = "" },
                 placeholder = "留空则默认使用上述校园网密码",
@@ -128,7 +122,7 @@ fun RegisterScreen(
                 label = "居民身份证号 (选填)",
                 value = idCard,
                 onValueChange = { idCard = it; errorMessage = "" },
-                placeholder = "选填，用于拾卡自动精准比对（若填须完整18位）"
+                placeholder = "选填，用于卡片自动精准比对（若填须完整18位）"
             )
 
             FormTextField(
@@ -150,25 +144,6 @@ fun RegisterScreen(
             }
         }
 
-        Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = Color(0xFFF3F7FA),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier.padding(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("🛡️", fontSize = 15.sp)
-                Text(
-                    "校园网密码仅用于单次向 eduroam 验证学号所有权。若未自定义应用密码，将默认以校园网密码作为初始应用登录密码。",
-                    fontSize = 11.sp,
-                    color = ScreenMuted,
-                    lineHeight = 16.sp
-                )
-            }
-        }
 
         if (errorMessage.isNotBlank()) {
             Text(errorMessage, color = Color(0xFFD32F2F), fontSize = 12.sp, lineHeight = 16.sp)
@@ -181,13 +156,13 @@ fun RegisterScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp), color = BrandBlue, strokeWidth = 2.dp)
-                    Text("正在连接 eduroam 官方验证服务器…", color = ScreenMuted, fontSize = 12.sp)
+                    Text("正在连接验证服务器…", color = ScreenMuted, fontSize = 12.sp)
                 }
             }
         }
 
         PrimaryActionButton(
-            text = if (isLoading) "正在验证中…" else "完成 eduroam 验证并注册",
+            text = if (isLoading) "正在验证中…" else "完成验证并注册",
             onClick = {
                 if (isLoading) return@PrimaryActionButton
                 val nameErr = ValidationHelper.validateName(name)
@@ -201,7 +176,7 @@ fun RegisterScreen(
                     return@PrimaryActionButton
                 }
                 if (eduroamPassword.isBlank()) {
-                    errorMessage = "请填写校园网/eduroam密码以完成身份验证"
+                    errorMessage = "请填写校园网密码以完成身份验证"
                     return@PrimaryActionButton
                 }
                 val idCardErr = ValidationHelper.validateIdCard(idCard, isOptional = true)

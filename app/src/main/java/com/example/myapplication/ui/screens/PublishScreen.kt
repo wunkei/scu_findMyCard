@@ -207,7 +207,7 @@ fun PublishScreen(
                     Text("⚠️", fontSize = 16.sp)
                     Column(modifier = Modifier.weight(1f)) {
                         Text("您当前处于未登录状态", color = Color(0xFFC2410C), fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        Text("登记拾获信息需要学号实名认证，点击立即登录 / 注册", color = Color(0xFFEA580C), fontSize = 11.sp)
+                        Text("登记拾获信息需要登录，点击立即登录 / 注册", color = Color(0xFFEA580C), fontSize = 11.sp)
                     }
                     Text("去登录 ›", color = Color(0xFFC2410C), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }

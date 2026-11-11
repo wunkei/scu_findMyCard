@@ -137,15 +137,26 @@ fun DiscoverScreen(
         AlertDialog(
             onDismissRequest = { selectedPost = null },
             title = {
+                val docName = post.title.substringBefore(" · ").ifBlank { "证件" }
+                val statusDisplay = when {
+                    post.status.contains("已归还") || post.status.contains("认领") -> "已归还失主"
+                    post.status == "还在原地" -> "还在原地"
+                    else -> post.status.ifBlank { "由发布者代为保管" }
+                }
+                val statusTint = when {
+                    statusDisplay.contains("归还") || statusDisplay.contains("认领") -> Color(0xFF7C3AED)
+                    statusDisplay == "还在原地" -> SuccessGreen
+                    else -> WarmOrange
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(getPostDisplayTitle(post), color = ScreenInk, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(docName, color = ScreenInk, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     TagPill(
-                        text = post.status,
-                        tint = if (post.status.contains("已归还")) SuccessGreen else BrandBlue
+                        text = statusDisplay,
+                        tint = statusTint
                     )
                 }
             },
@@ -171,7 +182,6 @@ fun DiscoverScreen(
                                 if (maskedDoc.isNotBlank()) {
                                     Text("证件号：$maskedDoc", color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                 }
-                                Text("（依据隐私合规政策，大厅公开信息仅脱敏展示）", color = ScreenMuted, fontSize = 11.sp)
                             }
                         }
                     }
@@ -184,7 +194,7 @@ fun DiscoverScreen(
                             modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
                         ) {
                             Text(
-                                "该证件已成功归还失主并完成归档，已从待认领广场移出。",
+                                "该证件已成功归还失主并完成归档，从待认领广场移出。",
                                 color = SuccessGreen,
                                 fontSize = 12.sp,
                                 modifier = Modifier.padding(8.dp)
