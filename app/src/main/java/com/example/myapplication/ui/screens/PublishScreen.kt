@@ -63,7 +63,7 @@ fun PublishScreen(
     var isPendingPublishAfterPhoto by remember { mutableStateOf(false) }
 
     var foundDate by remember { mutableStateOf(formatCurrentDateTime()) }
-    var custodyStatus by rememberSaveable { mutableStateOf("由发布者代为保管") }
+    var custodyStatus by rememberSaveable { mutableStateOf("还在原地") }
     var error by rememberSaveable { mutableStateOf("") }
     val selectedDocument = documentTypeOptions.first { it.name == selectedDocumentName }
 
@@ -122,14 +122,22 @@ fun PublishScreen(
             "校园卡" -> documentIdentifier.replace(" ", "").trim().removeSuffix("@scu.edu.cn").removeSuffix("@SCU.EDU.CN")
             else -> documentIdentifier.trim()
         }
+        val finalLocation = if (location.isNotBlank()) {
+            location.trim()
+        } else if (custodyStatus == "由发布者代为保管") {
+            "由发布者代为保管"
+        } else {
+            "具体地点未填写"
+        }
+
         onSubmit(
             LostFoundPost(
                 type = "拾卡",
                 status = statusDisplay,
                 title = safeTitle,
-                campus = campus,
-                location = location,
-                date = foundDate.trim(),
+                campus = campus.ifBlank { "江安校区" },
+                location = finalLocation,
+                date = foundDate.trim().ifBlank { formatCurrentDateTime() },
                 note = "",
                 isDemo = false,
                 personName = personName.trim(),
@@ -146,7 +154,8 @@ fun PublishScreen(
         capturedImageUriString = ""
         capturedImageFile = null
         foundDate = formatCurrentDateTime()
-        Toast.makeText(context, "发布成功！已绑定位置经纬度与现场照片", Toast.LENGTH_SHORT).show()
+        custodyStatus = "还在原地"
+        Toast.makeText(context, "发布成功！已上传经纬度位置${if (imagePath.isNotBlank()) "与现场照片" else ""}", Toast.LENGTH_SHORT).show()
     }
 
     val takePictureLauncher = rememberLauncherForActivityResult(
@@ -235,6 +244,38 @@ fun PublishScreen(
 
         InfoCard(Modifier.fillMaxWidth()) {
             Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Text("当前状态", fontSize = 13.sp, color = ScreenInk, fontWeight = FontWeight.SemiBold)
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf("还在原地", "由发布者代为保管").forEach { status ->
+                        SelectChip(status, selected = custodyStatus == status) {
+                            custodyStatus = status
+                            error = ""
+                        }
+                    }
+                }
+                if (custodyStatus == "由发布者代为保管") {
+                    Text(
+                        "💡 您已选择代为保管，可跳过拍照与具体地点要求，系统仍将自动记录当前经纬度",
+                        color = BrandBlue,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+                } else {
+                    Text(
+                        "📌 卡片留在原地时，请拍摄现场照片并填写具体地点，方便失主前往寻找",
+                        color = ScreenMuted,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+                }
+            }
+        }
+
+        InfoCard(Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Text("拾获校区", fontSize = 13.sp, color = ScreenInk, fontWeight = FontWeight.SemiBold)
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -249,10 +290,10 @@ fun PublishScreen(
                 }
             }
             FormTextField(
-                label = "具体地点",
+                label = if (custodyStatus == "还在原地") "具体地点" else "具体地点（代为保管可选）",
                 value = location,
                 onValueChange = { location = it; error = "" },
-                placeholder = if (isLocating) "正在定位当前位置…" else "例如：第一教学楼附近",
+                placeholder = if (isLocating) "正在定位当前位置…" else if (custodyStatus == "由发布者代为保管") "代为保管可不填，已自动获取经纬度" else "例如：第一教学楼附近",
                 trailing = {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -296,25 +337,18 @@ fun PublishScreen(
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            Text("证件当前状态", fontSize = 13.sp, color = ScreenInk, fontWeight = FontWeight.SemiBold)
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf("由发布者代为保管", "还在原地").forEach { status ->
-                    SelectChip(status, selected = custodyStatus == status) { custodyStatus = status }
-                }
-            }
-        }
-
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("物品当前位置照片", fontSize = 13.sp, color = ScreenInk, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (custodyStatus == "还在原地") "物品当前位置照片（必拍）" else "物品照片（代为保管可选）",
+                    fontSize = 13.sp,
+                    color = ScreenInk,
+                    fontWeight = FontWeight.SemiBold
+                )
                 if (capturedImageUriString.isNotBlank()) {
                     Text(
                         "重新拍摄",
@@ -358,8 +392,17 @@ fun PublishScreen(
                     ) {
                         Text("📷", fontSize = 20.sp)
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("拍摄物品当前放置位置照片", color = ScreenInk, fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                            Text("点击提前拍照，或点击下方发布按钮时将自动调用相机", color = ScreenMuted, fontSize = 11.sp)
+                            Text(
+                                if (custodyStatus == "还在原地") "拍摄物品当前放置位置照片" else "拍摄物品照片（可选）",
+                                color = ScreenInk,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                if (custodyStatus == "还在原地") "卡片留在原地，点击发布时将自动调用相机拍照" else "已选择代为保管，无需强制拍照，点击发布将直接跳过拍照",
+                                color = ScreenMuted,
+                                fontSize = 11.sp
+                            )
                         }
                         Text("拍照 ›", color = BrandBlue, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
@@ -375,8 +418,12 @@ fun PublishScreen(
                 showAuthDialog = true
                 return@PrimaryActionButton
             }
-            if (documentIdentifier.isBlank() || personName.isBlank() || campus.isBlank() || location.isBlank() || foundDate.isBlank()) {
-                error = "请填写完整号码、姓名、校区、地点和拾获时间。"
+            if (documentIdentifier.isBlank() || personName.isBlank() || campus.isBlank() || foundDate.isBlank()) {
+                error = "请填写完整号码、姓名、校区和拾获时间。"
+                return@PrimaryActionButton
+            }
+            if (custodyStatus == "还在原地" && location.isBlank()) {
+                error = "卡片还在原地，请填写具体地点方便失主寻找。"
                 return@PrimaryActionButton
             }
             if (selectedDocumentName == "校园卡") {
@@ -398,7 +445,7 @@ fun PublishScreen(
                 return@PrimaryActionButton
             }
 
-            if (capturedImageUriString.isBlank()) {
+            if (custodyStatus == "还在原地" && capturedImageUriString.isBlank()) {
                 isPendingPublishAfterPhoto = true
                 triggerCamera()
             } else {
