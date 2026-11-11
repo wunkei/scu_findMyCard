@@ -171,6 +171,17 @@ fun ProfileScreen(
                                 verticalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
                                 myPosts.forEach { post ->
+                                    val docName = post.title.substringBefore(" · ").ifBlank { "证件" }
+                                    val statusDisplay = when {
+                                        post.status.contains("已归还") || post.status.contains("认领") -> "已归还失主"
+                                        post.status == "还在原地" -> "还在原地"
+                                        else -> post.status.ifBlank { "由我代为保管" }
+                                    }
+                                    val statusTint = when {
+                                        statusDisplay.contains("归还") || statusDisplay.contains("认领") -> Color(0xFF7C3AED)
+                                        statusDisplay == "还在原地" -> SuccessGreen
+                                        else -> WarmOrange
+                                    }
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
                                         color = Color(0xFFF7F9FB),
@@ -182,8 +193,8 @@ fun ProfileScreen(
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Text(post.title, color = ScreenInk, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                                                TagPill(post.status, if (post.status.contains("已归还")) SuccessGreen else BrandBlue)
+                                                Text(docName, color = ScreenInk, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                                TagPill(statusDisplay, statusTint)
                                             }
                                             if (post.personName.isNotBlank() || post.documentNumber.isNotBlank()) {
                                                 Text("持卡人：${post.personName} · ${post.documentNumber}", color = ScreenInk, fontSize = 12.sp)
@@ -259,6 +270,17 @@ fun ProfileScreen(
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 matchingPosts.forEach { post ->
+                                    val docName = post.title.substringBefore(" · ").ifBlank { "证件" }
+                                    val statusDisplay = when {
+                                        post.status.contains("已归还") || post.status.contains("认领") -> "已归还失主"
+                                        post.status == "还在原地" -> "还在原地"
+                                        else -> post.status.ifBlank { "由发布者代为保管" }
+                                    }
+                                    val statusTint = when {
+                                        statusDisplay.contains("归还") || statusDisplay.contains("认领") -> Color(0xFF7C3AED)
+                                        statusDisplay == "还在原地" -> SuccessGreen
+                                        else -> WarmOrange
+                                    }
                                     Surface(
                                         shape = RoundedCornerShape(12.dp),
                                         color = Color(0xFFFFF9F5),
@@ -271,8 +293,8 @@ fun ProfileScreen(
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                Text(post.title, color = ScreenInk, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                                TagPill(post.status, WarmOrange)
+                                                Text(docName, color = ScreenInk, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                                                TagPill(statusDisplay, statusTint)
                                             }
                                             Text("卡片姓名：${post.personName} · 号码：${post.documentNumber}", color = ScreenInk, fontSize = 12.sp)
                                             Text("拾获地点：${post.campus} · ${post.location}", color = ScreenMuted, fontSize = 12.sp)
