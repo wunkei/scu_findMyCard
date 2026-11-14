@@ -76,7 +76,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         onResult: (EduroamResult) -> Unit
     ) {
         viewModelScope.launch {
-            val eduroamResult = EduroamAuthHelper.verifyEduroamAccount(studentId, eduroamPass)
+            val eduroamResult = EduroamAuthHelper.verifyEduroamAccount(
+                username = studentId,
+                password = eduroamPass,
+                context = getApplication()
+            )
             if (eduroamResult is EduroamResult.Success) {
                 repository.resetPassword(studentId, newAppPass)
             }

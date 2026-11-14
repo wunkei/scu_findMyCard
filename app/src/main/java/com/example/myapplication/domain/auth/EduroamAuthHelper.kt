@@ -1,5 +1,8 @@
 package com.example.myapplication.domain.auth
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -46,7 +49,26 @@ object EduroamAuthHelper {
         Pattern.CASE_INSENSITIVE
     )
 
-    suspend fun verifyEduroamAccount(username: String, password: String): EduroamResult = withContext(Dispatchers.IO) {
+    /**
+     * 利用系统原生 ConnectivityManager 进行快速且无网络开销的物理网络连通性检查
+     */
+    internal fun isNetworkConnected(context: Context?): Boolean {
+        context ?: return true
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return true
+            val network = cm.activeNetwork ?: return false
+            val capabilities = cm.getNetworkCapabilities(network) ?: return false
+            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    suspend fun verifyEduroamAccount(
+        username: String,
+        password: String,
+        context: Context? = null
+    ): EduroamResult = withContext(Dispatchers.IO) {
         val cleanUsername = username.trim()
         val cleanPassword = password.trim()
         if (cleanUsername.isBlank() || cleanPassword.isBlank()) {
@@ -54,7 +76,15 @@ object EduroamAuthHelper {
         }
 
         // ==========================================
+        // 前置检查：通过系统 ConnectivityManager 0 延迟秒查本地网络开关
+        // ==========================================
+        if (!isNetworkConnected(context)) {
+            return@withContext EduroamResult.Error("当前无网络连接，请检查Wi-Fi或移动数据设置")
+        }
+
+        // ==========================================
         // 阶段一：访问验证页面，获取 CSRF Token 与会话 Cookie
+        // 同时作为通往 eduroam 验证服务器的网络探针
         // ==========================================
         val pageHtml: String
         val cookies: String
@@ -71,7 +101,7 @@ object EduroamAuthHelper {
             val responseCode = pageConnection.responseCode
             if (responseCode !in 200..299) {
                 pageConnection.disconnect()
-                return@withContext EduroamResult.Error("无法连接到校园网验证服务器 (HTTP $responseCode)")
+                return@withContext EduroamResult.Error("校园网验证服务器暂时不可用 (HTTP $responseCode)")
             }
 
             cookies = extractCookies(pageConnection)
@@ -81,8 +111,10 @@ object EduroamAuthHelper {
             }
             pageConnection.disconnect()
         } catch (_: Exception) {
-            // 第一阶段连接失败，属于真实的本地网络或远端站点故障
-            return@withContext EduroamResult.Error("网络连接失败，请检查手机网络设置后重试")
+            if (!isNetworkConnected(context)) {
+                return@withContext EduroamResult.Error("网络连接已断开，请检查网络设置后重试")
+            }
+            return@withContext EduroamResult.Error("无法连接到校园网验证服务器，请稍后重试")
         }
 
         val csrfToken = extractCsrfToken(pageHtml)
@@ -132,17 +164,22 @@ object EduroamAuthHelper {
                 writer.flush()
             }
         } catch (_: ConnectException) {
-            return@withContext EduroamResult.Error("网络连接中断，请检查手机网络后重试")
+            if (!isNetworkConnected(context)) {
+                return@withContext EduroamResult.Error("网络连接已断开，请检查手机网络后重试")
+            }
+            return@withContext EduroamResult.Failed("学号或校园网密码错误，请重新核对")
         } catch (_: UnknownHostException) {
-            return@withContext EduroamResult.Error("网络连接异常，无法解析验证服务器")
+            return@withContext EduroamResult.Error("网络异常，无法解析校园网验证服务器")
         } catch (_: Exception) {
-            // 提交数据时中断，通常为上游 RADIUS 拒绝连接导致
+            if (!isNetworkConnected(context)) {
+                return@withContext EduroamResult.Error("网络连接已断开，请检查网络设置后重试")
+            }
             return@withContext EduroamResult.Failed("学号或校园网密码错误，请重新核对")
         }
 
         // ==========================================
         // 阶段三：读取与解析验证结果
-        // 核心优化：针对密码错误导致的 RADIUS 超时/网关 504/连接重置等，准确识别为密码错误
+        // 结合双重校验：当发生超时或连接中断时，排查本地网络与服务端 RADIUS 挂起
         // ==========================================
         try {
             val postResponseCode = postConnection.responseCode
@@ -154,7 +191,10 @@ object EduroamAuthHelper {
                     BufferedReader(InputStreamReader(errorStream, "UTF-8")).use { it.readText() }
                 } else {
                     postConnection.disconnect()
-                    // 504 Gateway Timeout 或 500 等异常通常是因密码错误触发后端 RADIUS 挂起或抛错
+                    // 504 Gateway Timeout 或 500 等异常通常是因密码错误触发后端 RADIUS 挂起超时
+                    if (!isNetworkConnected(context)) {
+                        return@withContext EduroamResult.Error("网络连接已断开，请检查网络设置后重试")
+                    }
                     return@withContext EduroamResult.Failed("学号或校园网密码错误，请重新核对")
                 }
             }
@@ -162,14 +202,25 @@ object EduroamAuthHelper {
 
             parseEduroamResponse(responseText)
         } catch (_: SocketTimeoutException) {
-            // 重点！当密码错误时，后端 RADIUS 代理进行多次重试无果后导致读取超时
-            // 此时前端已确认能连通服务器，超时直接归因于账号/密码验证失败
-            EduroamResult.Failed("学号或校园网密码错误，请重新核对")
+            // 重点！8秒读取超时到达时，先确认本地是否有网
+            if (!isNetworkConnected(context)) {
+                EduroamResult.Error("网络连接已断开，请检查网络设置后重试")
+            } else {
+                // 本地网络正常，说明是服务端因密码错误触发了 30s RADIUS 重试阻塞
+                EduroamResult.Failed("学号或校园网密码错误，请重新核对")
+            }
         } catch (_: EOFException) {
-            EduroamResult.Failed("学号或校园网密码错误，请重新核对")
+            if (!isNetworkConnected(context)) {
+                EduroamResult.Error("网络连接已断开，请检查网络设置后重试")
+            } else {
+                EduroamResult.Failed("学号或校园网密码错误，请重新核对")
+            }
         } catch (_: Exception) {
-            // 其他 IO 异常（如对端在 RADIUS 失败后 reset 连接）同样准确归因于凭据错误
-            EduroamResult.Failed("学号或校园网密码错误，请重新核对")
+            if (!isNetworkConnected(context)) {
+                EduroamResult.Error("网络连接已断开，请检查网络设置后重试")
+            } else {
+                EduroamResult.Failed("学号或校园网密码错误，请重新核对")
+            }
         }
     }
 

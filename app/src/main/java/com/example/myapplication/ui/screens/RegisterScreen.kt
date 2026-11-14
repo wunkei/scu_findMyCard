@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -35,6 +36,7 @@ fun RegisterScreen(
 ) {
     BackHandler(onBack = onBack)
 
+    val context = LocalContext.current.applicationContext
     val coroutineScope = rememberCoroutineScope()
     var studentId by rememberSaveable { mutableStateOf("") }
     var eduroamPassword by rememberSaveable { mutableStateOf("") }
@@ -200,7 +202,11 @@ fun RegisterScreen(
                         return@launch
                     }
 
-                    val result = EduroamAuthHelper.verifyEduroamAccount(studentId, eduroamPassword)
+                    val result = EduroamAuthHelper.verifyEduroamAccount(
+                        username = studentId,
+                        password = eduroamPassword,
+                        context = context
+                    )
                     isLoading = false
                     when (result) {
                         is EduroamResult.Success -> {
