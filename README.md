@@ -1,4 +1,4 @@
-# 四川大学「找卡宝」 (SCU FindMyCard)
+# SCU FindMyCards
 
 [![Platform](https://img.shields.io/badge/Platform-Android-green.svg)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Language-Kotlin-purple.svg)](https://kotlinlang.org)
@@ -8,7 +8,7 @@
 [![MinSDK](https://img.shields.io/badge/MinSDK-24-orange.svg)](https://developer.android.com)
 [![TargetSDK](https://img.shields.io/badge/TargetSDK-37-brightgreen.svg)](https://developer.android.com)
 
-**找卡宝 (SCU FindMyCard)** 是一款面向四川大学师生的高品质、安全合规、智能互助校园卡及重要身份凭证（居民身份证、校园卡、学生证、通行证等）失物招领 Android 应用。
+**SCU FindMyCard** 是一款面向四川大学师生的高品质、安全合规、智能互助校园卡及重要身份凭证（居民身份证、校园卡、学生证、通行证等）失物招领 Android 应用。
 
 本项目依据**现代软件工程（Software Engineering）优秀项目标准**设计并重构，严格践行**分层解耦架构 (Clean Architecture / MVVM)**、**单一职责原则 (SRP)**、**防篡改单元测试全覆盖**、**基于 GB 11643-1999 与 ISO 7064 的严密算法校验**以及**行业最高标准的字段级隐私脱敏规范**。
 
