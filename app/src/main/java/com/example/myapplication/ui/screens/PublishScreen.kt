@@ -1,6 +1,8 @@
 package com.example.myapplication.ui.screens
 
 import android.Manifest
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,9 +35,14 @@ import com.example.myapplication.domain.validation.ValidationHelper
 import com.example.myapplication.ui.components.*
 import com.example.myapplication.ui.dialogs.AuthDialog
 import com.example.myapplication.util.LocationHelper
+import com.example.myapplication.util.NetworkTimeHelper
 import com.kyant.backdrop.backdrops.LayerBackdrop
 import kotlinx.coroutines.launch
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun PublishScreen(
@@ -62,10 +69,65 @@ fun PublishScreen(
     var capturedImageUriString by rememberSaveable { mutableStateOf("") }
     var isPendingPublishAfterPhoto by remember { mutableStateOf(false) }
 
-    var foundDate by remember { mutableStateOf(formatCurrentDateTime()) }
+    var foundTimestamp by rememberSaveable { mutableStateOf(System.currentTimeMillis()) }
+    var foundDate by rememberSaveable { mutableStateOf(formatCurrentDateTime()) }
     var custodyStatus by rememberSaveable { mutableStateOf("还在原地") }
     var error by rememberSaveable { mutableStateOf("") }
     val selectedDocument = documentTypeOptions.first { it.name == selectedDocumentName }
+
+    val showDateTimePicker = {
+        val cal = Calendar.getInstance().apply { timeInMillis = foundTimestamp }
+        val currentYear = cal.get(Calendar.YEAR)
+        val currentMonth = cal.get(Calendar.MONTH)
+        val currentDay = cal.get(Calendar.DAY_OF_MONTH)
+        val currentHour = cal.get(Calendar.HOUR_OF_DAY)
+        val currentMinute = cal.get(Calendar.MINUTE)
+
+        val datePickerDialog = DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val timePickerDialog = TimePickerDialog(
+                    context,
+                    { _, hourOfDay, minute ->
+                        val selectedCal = Calendar.getInstance().apply {
+                            set(Calendar.YEAR, year)
+                            set(Calendar.MONTH, month)
+                            set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                            set(Calendar.HOUR_OF_DAY, hourOfDay)
+                            set(Calendar.MINUTE, minute)
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }
+                        val selectedMillis = selectedCal.timeInMillis
+
+                        // 异步调用腾讯时间接口校验所选时间不晚于当前时间
+                        coroutineScope.launch {
+                            val isValid = NetworkTimeHelper.validateNotLaterThanNow(selectedMillis)
+                            if (!isValid) {
+                                error = "拾获时间不能晚于当前时间，请重新选择"
+                                Toast.makeText(context, "拾获时间不能晚于当前时间", Toast.LENGTH_SHORT).show()
+                            } else {
+                                error = ""
+                                foundTimestamp = selectedMillis
+                                val formatter = SimpleDateFormat("yyyy年M月d日 HH:mm", Locale.getDefault())
+                                foundDate = formatter.format(Date(selectedMillis))
+                            }
+                        }
+                    },
+                    currentHour,
+                    currentMinute,
+                    true
+                )
+                timePickerDialog.show()
+            },
+            currentYear,
+            currentMonth,
+            currentDay
+        )
+        // 限制最大可选日期为今天
+        datePickerDialog.datePicker.maxDate = System.currentTimeMillis()
+        datePickerDialog.show()
+    }
 
     var permissionLauncherRef: androidx.activity.result.ActivityResultLauncher<Array<String>>? = null
 
@@ -155,6 +217,7 @@ fun PublishScreen(
         error = ""
         capturedImageUriString = ""
         capturedImageFile = null
+        foundTimestamp = System.currentTimeMillis()
         foundDate = formatCurrentDateTime()
         custodyStatus = "还在原地"
         campus = currentUser?.campus?.ifBlank { "江安校区" } ?: "江安校区"
@@ -312,12 +375,56 @@ fun PublishScreen(
                     }
                 )
             }
-            FormTextField(
-                label = "拾获时间",
-                value = foundDate,
-                onValueChange = { foundDate = it; error = "" },
-                placeholder = "例如：2026年11月10日 18:30"
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    "拾获时间",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = ScreenInk
+                )
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color.White.copy(alpha = 0.85f),
+                    border = BorderStroke(1.dp, Color(0x18000000)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable(onClick = showDateTimePicker)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 13.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text("🕒", fontSize = 16.sp)
+                            Text(
+                                foundDate,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ScreenInk
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = BrandBlue.copy(alpha = 0.1f)
+                        ) {
+                            Text(
+                                "选择时间 ›",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = BrandBlue,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
             if (currentLatitude != null && currentLongitude != null) {
                 Text(
                     "北纬 ${"%.4f".format(currentLatitude)}°, 东经 ${"%.4f".format(currentLongitude)}°",
@@ -446,7 +553,14 @@ fun PublishScreen(
             }
 
             val finalImagePath = if (custodyStatus != "还在原地") "" else capturedImageUriString
-            doSubmitPost(finalImagePath)
+            coroutineScope.launch {
+                val isTimeValid = NetworkTimeHelper.validateNotLaterThanNow(foundTimestamp)
+                if (!isTimeValid) {
+                    error = "所选拾获时间不能晚于当前时间，请重新选择"
+                    return@launch
+                }
+                doSubmitPost(finalImagePath)
+            }
         }
     }
 
