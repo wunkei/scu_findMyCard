@@ -93,9 +93,9 @@ fun FloatingGlassNav(
                 effects = {
                     vibrancy()
                     lens(
-                        refractionHeight = 6.6.dp.toPx(),
-                        refractionAmount = 24.dp.toPx(),
-                        chromaticAberration = false
+                        refractionHeight = 13.2.dp.toPx(),
+                        refractionAmount = 48.dp.toPx(),
+                        chromaticAberration = true
                     )
                 },
                 highlight = { Highlight.Ambient.copy(alpha = .20f) },
@@ -150,12 +150,12 @@ fun FloatingGlassNav(
                             colorControls(saturation = 1f + .5f * idleEffect)
                             blur(.35f.dp.toPx() * idleEffect)
                         }
-                        val rHeight = 3.dp.toPx() * (0.6f + 0.4f * pressProgress)
-                        val rAmount = 14.dp.toPx() * (0.6f + 0.4f * pressProgress)
+                        val rHeight = 6.dp.toPx() * (0.6f + 0.4f * pressProgress)
+                        val rAmount = 28.dp.toPx() * (0.6f + 0.4f * pressProgress)
                         lens(
                             refractionHeight = rHeight,
                             refractionAmount = rAmount,
-                            chromaticAberration = false
+                            chromaticAberration = true
                         )
                     },
                     highlight = { Highlight.Default.copy(alpha = .25f * (1f - pressProgress)) },
