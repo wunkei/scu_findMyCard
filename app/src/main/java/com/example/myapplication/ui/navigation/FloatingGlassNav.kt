@@ -94,14 +94,14 @@ fun FloatingGlassNav(
                     vibrancy()
                     lens(
                         refractionHeight = 13.2.dp.toPx(),
-                        refractionAmount = 48.dp.toPx(),
-                        chromaticAberration = true
+                        refractionAmount = 24.dp.toPx(),
+                        chromaticAberration = false
                     )
                 },
                 highlight = { Highlight.Ambient.copy(alpha = .20f) },
                 shadow = { Shadow(radius = 10.dp, color = Color.Black.copy(alpha = .08f)) },
                 exportedBackdrop = capsuleSurfaceBackdrop,
-                onDrawSurface = { drawRect(Color(0xFFE5E9EC).copy(alpha = .75f)) },
+                onDrawSurface = { drawRect(Color(0xFFE5E9EC).copy(alpha = .40f)) },
                 onDrawFront = {
                     drawRoundRect(
                         color = Color.Black.copy(alpha = .9f),
@@ -151,11 +151,11 @@ fun FloatingGlassNav(
                             blur(.35f.dp.toPx() * idleEffect)
                         }
                         val rHeight = 6.dp.toPx() * (0.6f + 0.4f * pressProgress)
-                        val rAmount = 28.dp.toPx() * (0.6f + 0.4f * pressProgress)
+                        val rAmount = 14.dp.toPx() * (0.6f + 0.4f * pressProgress)
                         lens(
                             refractionHeight = rHeight,
                             refractionAmount = rAmount,
-                            chromaticAberration = true
+                            chromaticAberration = false
                         )
                     },
                     highlight = { Highlight.Default.copy(alpha = .25f * (1f - pressProgress)) },
@@ -164,7 +164,7 @@ fun FloatingGlassNav(
                         scaleX = capsuleScaleX
                         scaleY = capsuleScaleY
                     },
-                    onDrawSurface = { drawRect(Color(0xFFD4DCE2).copy(alpha = .85f * (1f - pressProgress))) }
+                    onDrawSurface = { drawRect(Color(0xFFD4DCE2).copy(alpha = .50f * (1f - pressProgress))) }
                 )
                 .drawWithCache {
                     val rimIntensity = .32f + pressProgress * .68f
