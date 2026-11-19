@@ -51,6 +51,7 @@ fun PublishScreen(
     onLogin: (String, String, (Boolean) -> Unit) -> Unit,
     onResetPassword: (String, String, String, (EduroamResult) -> Unit) -> Unit,
     onNavigateToRegister: () -> Unit,
+    onUpdateUserContact: (String, String, String) -> Unit = { _, _, _ -> },
     onSubmit: (LostFoundPost) -> Unit
 ) {
     val context = LocalContext.current
@@ -72,6 +73,10 @@ fun PublishScreen(
     var foundTimestamp by rememberSaveable { mutableStateOf(System.currentTimeMillis()) }
     var foundDate by rememberSaveable { mutableStateOf(formatCurrentDateTime()) }
     var custodyStatus by rememberSaveable { mutableStateOf("还在原地") }
+    var sharePhoneInSitu by rememberSaveable { mutableStateOf(false) }
+    var showPhoneSupplementDialog by remember { mutableStateOf(false) }
+    var supplementPhoneInput by remember { mutableStateOf("") }
+    var supplementPhoneError by remember { mutableStateOf("") }
     var error by rememberSaveable { mutableStateOf("") }
     val selectedDocument = documentTypeOptions.first { it.name == selectedDocumentName }
 
@@ -194,6 +199,12 @@ fun PublishScreen(
 
         val finalImagePath = if (custodyStatus != "还在原地") "" else imagePath
 
+        val finalPhone = if (custodyStatus == "由我代为保管") {
+            currentUser?.phone?.trim().orEmpty()
+        } else {
+            if (sharePhoneInSitu) currentUser?.phone?.trim().orEmpty() else ""
+        }
+
         onSubmit(
             LostFoundPost(
                 type = "拾卡",
@@ -208,7 +219,8 @@ fun PublishScreen(
                 documentNumber = cleanDocNumber,
                 latitude = finalLat,
                 longitude = finalLng,
-                imageUri = finalImagePath
+                imageUri = finalImagePath,
+                contactPhone = finalPhone
             )
         )
         documentIdentifier = ""
@@ -220,6 +232,7 @@ fun PublishScreen(
         foundTimestamp = System.currentTimeMillis()
         foundDate = formatCurrentDateTime()
         custodyStatus = "还在原地"
+        sharePhoneInSitu = false
         campus = currentUser?.campus?.ifBlank { "江安校区" } ?: "江安校区"
         Toast.makeText(context, "发布成功！已上传经纬度位置${if (finalImagePath.isNotBlank()) "与现场照片" else ""}", Toast.LENGTH_SHORT).show()
     }
@@ -320,6 +333,122 @@ fun PublishScreen(
                         SelectChip(status, selected = custodyStatus == status) {
                             custodyStatus = status
                             error = ""
+                            if (status == "由我代为保管" && (currentUser?.phone?.isBlank() == true)) {
+                                supplementPhoneInput = ""
+                                supplementPhoneError = ""
+                                showPhoneSupplementDialog = true
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (custodyStatus == "由我代为保管") {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFFF0FDF4),
+                    border = BorderStroke(1.dp, Color(0xFFDCFCE7)),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("🛡️", fontSize = 16.sp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                if (currentUser?.phone?.isNotBlank() == true) {
+                                    "已关联您的联系电话：${currentUser.phone}"
+                                } else {
+                                    "尚未登记联系电话（代保管必须填写）"
+                                },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (currentUser?.phone?.isNotBlank() == true) SuccessGreen else Color(0xFFC2410C)
+                            )
+                            Text(
+                                "号码仅在系统实名档案与卡片100%匹配时对唯一失主可见，不会对外公开。",
+                                fontSize = 11.sp,
+                                color = ScreenMuted
+                            )
+                        }
+                        if (currentUser?.phone?.isBlank() == true) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = BrandBlue,
+                                modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable {
+                                    supplementPhoneInput = ""
+                                    supplementPhoneError = ""
+                                    showPhoneSupplementDialog = true
+                                }
+                            ) {
+                                Text(
+                                    "去填写",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFFF8FAFC),
+                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (!sharePhoneInSitu) {
+                                    if (currentUser?.phone?.isBlank() == true) {
+                                        supplementPhoneInput = ""
+                                        supplementPhoneError = ""
+                                        showPhoneSupplementDialog = true
+                                    } else {
+                                        sharePhoneInSitu = true
+                                    }
+                                } else {
+                                    sharePhoneInSitu = false
+                                }
+                            }
+                            .padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = if (sharePhoneInSitu) BrandBlue else Color.White,
+                            border = BorderStroke(1.5.dp, if (sharePhoneInSitu) BrandBlue else ScreenMuted.copy(alpha = 0.5f)),
+                            modifier = Modifier.size(18.dp)
+                        ) {
+                            if (sharePhoneInSitu) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text("✓", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "向失主公开我的联系电话（选填，默认不公开）",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = ScreenInk
+                            )
+                            Text(
+                                if (currentUser?.phone?.isNotBlank() == true) {
+                                    "勾选后，匹配失主认领时可查看到您的电话：${currentUser.phone}"
+                                } else {
+                                    "您尚未绑定手机号，勾选后将引导您快速补充"
+                                },
+                                fontSize = 11.sp,
+                                color = ScreenMuted
+                            )
                         }
                     }
                 }
@@ -518,6 +647,13 @@ fun PublishScreen(
                 showAuthDialog = true
                 return@PrimaryActionButton
             }
+            if (custodyStatus == "由我代为保管" && currentUser.phone.isBlank()) {
+                supplementPhoneInput = ""
+                supplementPhoneError = ""
+                showPhoneSupplementDialog = true
+                error = "由于物品由您代为保管，请先补充联系电话以便失主联系。"
+                return@PrimaryActionButton
+            }
             if (documentIdentifier.isBlank() || personName.isBlank() || campus.isBlank() || foundDate.isBlank()) {
                 error = "请填写完整号码、姓名、校区和拾获时间。"
                 return@PrimaryActionButton
@@ -571,5 +707,99 @@ fun PublishScreen(
             onResetPassword = onResetPassword,
             onNavigateToRegister = onNavigateToRegister
         )
+    }
+
+    if (showPhoneSupplementDialog && currentUser != null) {
+        androidx.compose.ui.window.Dialog(onDismissRequest = { showPhoneSupplementDialog = false }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color.White,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("📱", fontSize = 20.sp)
+                        Column {
+                            Text("补充联系电话", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = ScreenInk)
+                            Text("方便失主与您取得联系进行交接", fontSize = 11.sp, color = ScreenMuted)
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFEFF6FF),
+                        border = BorderStroke(1.dp, Color(0xFFDBEAFE)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            "提示：联系电话将被安全加密存储，且仅在失主实名信息与拾获卡片 100% 匹配成功后，对其单独显示。",
+                            color = BrandBlue,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+
+                    FormTextField(
+                        label = "手机号码",
+                        value = supplementPhoneInput,
+                        onValueChange = {
+                            supplementPhoneInput = it
+                            supplementPhoneError = ""
+                        },
+                        placeholder = "请输入11位中国大陆手机号码"
+                    )
+
+                    if (supplementPhoneError.isNotBlank()) {
+                        Text(supplementPhoneError, color = Color(0xFFB5473C), fontSize = 12.sp)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFF1F5F9),
+                            modifier = Modifier.weight(1f).clickable {
+                                showPhoneSupplementDialog = false
+                            }
+                        ) {
+                            Box(modifier = Modifier.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                                Text("取消", color = ScreenMuted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = BrandBlue,
+                            modifier = Modifier.weight(1.3f).clickable {
+                                val phoneErr = ValidationHelper.validatePhone(supplementPhoneInput, isOptional = false)
+                                if (phoneErr != null) {
+                                    supplementPhoneError = phoneErr
+                                    return@clickable
+                                }
+                                val cleanPhone = supplementPhoneInput.replace(" ", "").trim()
+                                onUpdateUserContact(currentUser.studentId, cleanPhone, currentUser.campus)
+                                showPhoneSupplementDialog = false
+                                if (custodyStatus == "还在原地") {
+                                    sharePhoneInSitu = true
+                                }
+                                error = ""
+                                Toast.makeText(context, "联系电话保存成功！", Toast.LENGTH_SHORT).show()
+                            }
+                        ) {
+                            Box(modifier = Modifier.padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                                Text("确认保存", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

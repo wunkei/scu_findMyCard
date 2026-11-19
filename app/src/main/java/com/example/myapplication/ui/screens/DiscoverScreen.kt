@@ -1,5 +1,8 @@
 package com.example.myapplication.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -277,6 +280,67 @@ fun DiscoverScreen(
                                                     )
                                                 }
                                                 Text("点击可放大查看现场照片", color = ScreenMuted, fontSize = 10.sp)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if (post.contactPhone.isNotBlank()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFFF0FDF4),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text("📞", fontSize = 14.sp)
+                                                Text(
+                                                    "拾获者联系电话",
+                                                    color = SuccessGreen,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            Text(
+                                                post.contactPhone,
+                                                color = ScreenInk,
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                Button(
+                                                    onClick = {
+                                                        try {
+                                                            val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:${post.contactPhone}"))
+                                                            context.startActivity(intent)
+                                                        } catch (_: Exception) {
+                                                            Toast.makeText(context, "无法启动拨号界面", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    },
+                                                    colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Text("一键拨打电话", color = Color.White, fontSize = 11.sp)
+                                                }
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                                        val clip = android.content.ClipData.newPlainText("phone", post.contactPhone)
+                                                        clipboard?.setPrimaryClip(clip)
+                                                        Toast.makeText(context, "号码已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Text("复制号码", color = ScreenInk, fontSize = 11.sp)
+                                                }
                                             }
                                         }
                                     }

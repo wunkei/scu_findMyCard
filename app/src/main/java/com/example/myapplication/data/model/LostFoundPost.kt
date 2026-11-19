@@ -17,6 +17,7 @@ data class LostFoundPost(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val imageUri: String = "",
+    val contactPhone: String = "",
     val createdAt: Long = System.currentTimeMillis()
 ) {
     constructor(
@@ -32,7 +33,8 @@ data class LostFoundPost(
         documentNumber: String = "",
         latitude: Double? = null,
         longitude: Double? = null,
-        imageUri: String = ""
+        imageUri: String = "",
+        contactPhone: String = ""
     ) : this(
         id = UUID.randomUUID().toString(),
         type = type,
@@ -48,6 +50,7 @@ data class LostFoundPost(
         latitude = latitude,
         longitude = longitude,
         imageUri = imageUri,
+        contactPhone = contactPhone,
         createdAt = System.currentTimeMillis()
     )
 }

@@ -19,7 +19,8 @@ class LostFoundPostTest {
             documentNumber = "2023141240001",
             latitude = 30.557,
             longitude = 104.002,
-            imageUri = "content://media/123"
+            imageUri = "content://media/123",
+            contactPhone = "13800138000"
         )
 
         assertNotNull(post.id)
@@ -33,6 +34,7 @@ class LostFoundPostTest {
         assertEquals(30.557, post.latitude!!, 0.001)
         assertEquals(104.002, post.longitude!!, 0.001)
         assertEquals("content://media/123", post.imageUri)
+        assertEquals("13800138000", post.contactPhone)
         assertFalse(post.isDemo)
         assertTrue(post.createdAt > 0)
     }

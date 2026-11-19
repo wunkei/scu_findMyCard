@@ -76,6 +76,9 @@ private fun MainScreen(viewModel: MainViewModel = viewModel()) {
                             viewModel.resetPasswordViaEduroam(studentId, eduroamPass, newPass, callback)
                         },
                         onNavigateToRegister = { isRegistering = true },
+                        onUpdateUserContact = { studentId, phone, campus ->
+                            viewModel.updateUserContact(studentId, phone, campus)
+                        },
                         onSubmit = { post ->
                             viewModel.publishPost(post)
                             selected = "发现"
